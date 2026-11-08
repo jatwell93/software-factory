@@ -1,0 +1,59 @@
+# The config date-management-app would use once it consumes the factory.
+# Every value comes from the coupling inventory in that repo's
+# openspec/changes/extract-software-factory/design.md.
+spec_source: openspec
+owner: jatwell93
+default_branch: main
+branch_prefix: feature/factory-
+
+gates:
+  - run: npm run lint
+  - when: ['frontend/**', 'shared/**']
+    run: npm run test:frontend:diff
+  - when: ['workers/**', 'shared/**', 'database/**']
+    run: npm run test:db
+  - when: ['workers/**', 'shared/**']
+    run: (cd workers && npm run typecheck)
+  - when: ['scripts/**', '.github/**', '.claude/**']
+    run: npm run test:tooling
+
+protected_paths:
+  - database/migrations/**
+  - scripts/database-backup.sh
+  - eslint.config.js
+  - eslint.ignores.js
+  - eslint.complexity-baseline.js
+  - scripts/complexity-baseline.test.js
+
+forbidden_commands:
+  - npm run test:prod
+  - doppler
+
+review_bots:
+  - sentry
+  - codescene-delta-analysis
+  - copilot-pull-request-reviewer
+reviews_timeout_minutes: 30
+
+ci_workflows:
+  - CodeQL Advanced
+  - Database Conformance
+  - Deploy Frontend to Cloudflare Pages
+  - Deploy Workers API
+  - Frontend Test & Coverage
+  - Migrations E2E (real PostgreSQL)
+  - Secrets Scan
+  - Workers Bundle Size Check
+  - Workers Test
+
+runner:
+  node_version: '22'
+  install: npm ci
+
+spend_cap_usd: 20
+max_turns: 200
+timeout_minutes: 80
+
+hooks:
+  chain:
+    - scripts/pre-commit-secrets.sh

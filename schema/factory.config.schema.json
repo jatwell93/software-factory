@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jatwell93/software-factory/schema/factory.config.schema.json",
+  "title": "factory.config.yml",
+  "description": "Everything a consumer repo sets for the software factory. The factory holds no value that belongs to one repo.",
+  "type": "object",
+  "required": ["spec_source", "owner", "gates"],
+  "additionalProperties": false,
+  "properties": {
+    "spec_source": {
+      "description": "Which spec-source adapter reads and updates changes, for example openspec. Any adapter name is allowed here: whether the adapter is installed is checked by doctor, not by this schema.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "owner": {
+      "description": "GitHub login of the one person who merges, is mentioned on escalation, and whose labels start work.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$"
+    },
+    "default_branch": {
+      "description": "The branch factory PRs target and the git hooks protect.",
+      "type": "string",
+      "minLength": 1,
+      "default": "main"
+    },
+    "branch_prefix": {
+      "description": "Prefix of the branch a factory task is built on; the change id and task number follow it.",
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._/-]*$",
+      "default": "feature/factory-"
+    },
+    "gates": {
+      "description": "Commands the agent must run before it pushes. An entry with no when runs always; an entry with when runs only if the change touches a matching path.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["run"],
+        "additionalProperties": false,
+        "properties": {
+          "when": { "$ref": "#/$defs/globs" },
+          "run": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "protected_paths": {
+      "description": "Paths the factory must never edit, added to the built-in baseline. The baseline cannot be removed from here.",
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true,
+      "default": []
+    },
+    "forbidden_commands": {
+      "description": "Command prefixes the agent may not run, added to the factory's built-in denials.",
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true,
+      "default": []
+    },
+    "review_bots": {
+      "description": "Logins of the review bots, without the [bot] suffix. A bot the factory has a profile for gets that profile; any other is treated as a plain review author.",
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+      "uniqueItems": true,
+      "default": []
+    },
+    "reviews_timeout_minutes": {
+      "description": "How long after the last push factory/reviews-settled waits for a configured bot before it turns to success.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1440,
+      "default": 30
+    },
+    "ci_workflows": {
+      "description": "Names of the CI workflows a babysit pass waits for. init writes the same list into the relay workflow's trigger, and doctor fails when the two differ.",
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true,
+      "default": []
+    },
+    "runner": {
+      "description": "How the runner prepares a checkout before the agent starts.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "node_version": {
+          "description": "Node version the factory's own scripts run on.",
+          "type": "string",
+          "pattern": "^[0-9]+(\\.[0-9x]+)*$",
+          "default": "22"
+        },
+        "install": {
+          "description": "Command that installs the project's dependencies. A command, so other stacks can set their own.",
+          "type": "string",
+          "minLength": 1,
+          "default": "npm ci"
+        }
+      }
+    },
+    "spend_cap_usd": {
+      "description": "Per-run cost cap passed to the agent. Spend can pass it, so leave headroom.",
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "default": 20
+    },
+    "max_turns": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 200
+    },
+    "timeout_minutes": {
+      "description": "Step timeout for one agent run.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 360,
+      "default": 80
+    },
+    "change_id_max_length": {
+      "description": "Longest change id accepted. GitHub caps a label at 50 characters and the factory label is factory:<id>, so 42 is the most any value can be.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 42,
+      "default": 42
+    },
+    "labels": {
+      "description": "Override a factory label name. The factory/no-go-guard status name is fixed and not set here.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "change_prefix": { "type": "string", "minLength": 1, "default": "factory:" },
+        "ready": { "type": "string", "minLength": 1, "default": "factory-ready" },
+        "needs_human": { "type": "string", "minLength": 1, "default": "needs-human" },
+        "retry": { "type": "string", "minLength": 1, "default": "factory-retry" },
+        "retrying": { "type": "string", "minLength": 1, "default": "factory-retrying" },
+        "digest": { "type": "string", "minLength": 1, "default": "factory-digest" }
+      }
+    },
+    "hooks": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "chain": {
+          "description": "Hook scripts the installer runs after the factory's own main-branch check, for example a secret scan the project keeps.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true,
+          "default": []
+        }
+      }
+    }
+  },
+  "$defs": {
+    "globs": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    }
+  }
+}
