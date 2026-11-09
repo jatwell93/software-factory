@@ -1,4 +1,4 @@
-"use strict";
+'use strict';
 
 /**
  * The shared contract suite. Every spec-source adapter runs it from its own test
@@ -15,18 +15,18 @@
  * these (for example blocking edges) does not meet the contract.
  */
 
-const test = require("node:test");
-const assert = require("node:assert/strict");
-const { assertAdapter, OPERATIONS } = require("./contract.js");
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { assertAdapter, OPERATIONS } = require('./contract.js');
 
 const FIXTURE = {
-  changeId: "fix-one",
+  changeId: 'fix-one',
   tasks: [
-    { id: "1.1", done: false, owner: false, blockedBy: [] },
-    { id: "1.2", done: false, owner: true, blockedBy: ["1.1"] },
-    { id: "1.3", done: true, owner: false, blockedBy: [] },
+    { id: '1.1', done: false, owner: false, blockedBy: [] },
+    { id: '1.2', done: false, owner: true, blockedBy: ['1.1'] },
+    { id: '1.3', done: true, owner: false, blockedBy: [] },
   ],
-  autonomy: { merge: "human", pr: "per-change", noGo: ["docs/**"] },
+  autonomy: { merge: 'human', pr: 'per-change', noGo: ['docs/**'] },
 };
 
 // An adapter may throw at once or return a rejected promise; both count as a refusal.
@@ -47,39 +47,36 @@ function defineContractTests(name, create) {
       await fn(adapter, projectRoot);
     });
 
-  t("has a name and every operation", (adapter) => {
+  t('has a name and every operation', (adapter) => {
     assertAdapter(adapter);
     assert.equal(adapter.name, name);
     assert.equal(OPERATIONS.length, 7);
   });
 
-  t("lists the active change", async (adapter) => {
+  t('lists the active change', async (adapter) => {
     const ids = (await adapter.listChanges()).map((c) => c.id);
     assert.deepEqual(ids, [FIXTURE.changeId]);
   });
 
-  t("lists tasks with done, owner and blockedBy", async (adapter) => {
+  t('lists tasks with done, owner and blockedBy', async (adapter) => {
     const tasks = await adapter.listTasks(FIXTURE.changeId);
     assert.deepEqual(shape(tasks), FIXTURE.tasks);
-    assert.ok(tasks.every((task) => typeof task.title === "string"));
+    assert.ok(tasks.every((task) => typeof task.title === 'string'));
   });
 
-  t("rejects an unknown change", async (adapter) => {
-    await fails(() => adapter.listTasks("no-such-change"));
-    await fails(() => adapter.readAutonomy("no-such-change"));
-    await fails(() => adapter.tickTask("no-such-change", "1.1"));
-    await fails(() => adapter.archive("no-such-change"));
+  t('rejects an unknown change', async (adapter) => {
+    await fails(() => adapter.listTasks('no-such-change'));
+    await fails(() => adapter.readAutonomy('no-such-change'));
+    await fails(() => adapter.tickTask('no-such-change', '1.1'));
+    await fails(() => adapter.archive('no-such-change'));
   });
 
-  t("reads autonomy with defaults applied", async (adapter) => {
-    assert.deepEqual(
-      await adapter.readAutonomy(FIXTURE.changeId),
-      FIXTURE.autonomy,
-    );
+  t('reads autonomy with defaults applied', async (adapter) => {
+    assert.deepEqual(await adapter.readAutonomy(FIXTURE.changeId), FIXTURE.autonomy);
   });
 
-  t("ticks one task and leaves the others", async (adapter) => {
-    await adapter.tickTask(FIXTURE.changeId, "1.1");
+  t('ticks one task and leaves the others', async (adapter) => {
+    await adapter.tickTask(FIXTURE.changeId, '1.1');
     const tasks = shape(await adapter.listTasks(FIXTURE.changeId));
     assert.deepEqual(tasks, [
       { ...FIXTURE.tasks[0], done: true },
@@ -88,36 +85,36 @@ function defineContractTests(name, create) {
     ]);
   });
 
-  t("ticking twice changes nothing more", async (adapter) => {
-    await adapter.tickTask(FIXTURE.changeId, "1.1");
+  t('ticking twice changes nothing more', async (adapter) => {
+    await adapter.tickTask(FIXTURE.changeId, '1.1');
     const once = shape(await adapter.listTasks(FIXTURE.changeId));
-    await adapter.tickTask(FIXTURE.changeId, "1.1");
+    await adapter.tickTask(FIXTURE.changeId, '1.1');
     assert.deepEqual(shape(await adapter.listTasks(FIXTURE.changeId)), once);
   });
 
-  t("rejects ticking an unknown task", async (adapter) => {
-    await fails(() => adapter.tickTask(FIXTURE.changeId, "9.9"));
+  t('rejects ticking an unknown task', async (adapter) => {
+    await fails(() => adapter.tickTask(FIXTURE.changeId, '9.9'));
   });
 
-  t("archives a change out of the active list", async (adapter) => {
+  t('archives a change out of the active list', async (adapter) => {
     await adapter.archive(FIXTURE.changeId);
     assert.deepEqual(await adapter.listChanges(), []);
   });
 
-  t("scaffolds a new change and refuses a taken id", async (adapter) => {
-    const { path } = await adapter.scaffold("new-thing", {
-      title: "New thing",
+  t('scaffolds a new change and refuses a taken id', async (adapter) => {
+    const { path } = await adapter.scaffold('new-thing', {
+      title: 'New thing',
     });
-    assert.equal(typeof path, "string");
+    assert.equal(typeof path, 'string');
     const ids = (await adapter.listChanges()).map((c) => c.id).sort();
-    assert.deepEqual(ids, [FIXTURE.changeId, "new-thing"]);
-    await fails(() => adapter.scaffold("new-thing"));
+    assert.deepEqual(ids, [FIXTURE.changeId, 'new-thing']);
+    await fails(() => adapter.scaffold('new-thing'));
     await fails(() => adapter.scaffold(FIXTURE.changeId));
   });
 
-  t("setup is safe to run twice", async (adapter, projectRoot) => {
+  t('setup is safe to run twice', async (adapter, projectRoot) => {
     const first = await adapter.setup(projectRoot);
-    assert.equal(typeof first.changed, "boolean");
+    assert.equal(typeof first.changed, 'boolean');
     assert.deepEqual(await adapter.setup(projectRoot), { changed: false });
   });
 }

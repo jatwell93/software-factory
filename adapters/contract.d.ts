@@ -28,9 +28,9 @@ export interface Task {
 
 export interface Autonomy {
   /** The only value in use: the owner always merges. */
-  merge: "human";
+  merge: 'human';
   /** per-change keeps every task on one PR; per-task opens one PR per task. */
-  pr: "per-task" | "per-change";
+  pr: 'per-task' | 'per-change';
   /** Paths this change adds to the protected baseline. */
   noGo: string[];
   /** An existing issue the factory reports on, when the change names one. */
@@ -57,10 +57,7 @@ export interface SpecSourceAdapter {
   archive(changeId: string): MaybePromise<void>;
 
   /** Create an empty change and return where it lives. Rejects when the id is taken. */
-  scaffold(
-    changeId: string,
-    options?: { title?: string },
-  ): MaybePromise<{ path: string }>;
+  scaffold(changeId: string, options?: { title?: string }): MaybePromise<{ path: string }>;
 
   /**
    * Prepare a project to use the spec source, for example run openspec init.
