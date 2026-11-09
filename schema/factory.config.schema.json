@@ -127,12 +127,36 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "change_prefix": { "type": "string", "minLength": 1, "default": "factory:" },
-        "ready": { "type": "string", "minLength": 1, "default": "factory-ready" },
-        "needs_human": { "type": "string", "minLength": 1, "default": "needs-human" },
-        "retry": { "type": "string", "minLength": 1, "default": "factory-retry" },
-        "retrying": { "type": "string", "minLength": 1, "default": "factory-retrying" },
-        "digest": { "type": "string", "minLength": 1, "default": "factory-digest" }
+        "change_prefix": {
+          "type": "string",
+          "minLength": 1,
+          "default": "factory:"
+        },
+        "ready": {
+          "type": "string",
+          "minLength": 1,
+          "default": "factory-ready"
+        },
+        "needs_human": {
+          "type": "string",
+          "minLength": 1,
+          "default": "needs-human"
+        },
+        "retry": {
+          "type": "string",
+          "minLength": 1,
+          "default": "factory-retry"
+        },
+        "retrying": {
+          "type": "string",
+          "minLength": 1,
+          "default": "factory-retrying"
+        },
+        "digest": {
+          "type": "string",
+          "minLength": 1,
+          "default": "factory-digest"
+        }
       }
     },
     "hooks": {

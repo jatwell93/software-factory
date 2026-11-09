@@ -8,13 +8,13 @@ branch_prefix: feature/factory-
 
 gates:
   - run: npm run lint
-  - when: ['frontend/**', 'shared/**']
+  - when: ["frontend/**", "shared/**"]
     run: npm run test:frontend:diff
-  - when: ['workers/**', 'shared/**', 'database/**']
+  - when: ["workers/**", "shared/**", "database/**"]
     run: npm run test:db
-  - when: ['workers/**', 'shared/**']
+  - when: ["workers/**", "shared/**"]
     run: (cd workers && npm run typecheck)
-  - when: ['scripts/**', '.github/**', '.claude/**']
+  - when: ["scripts/**", ".github/**", ".claude/**"]
     run: npm run test:tooling
 
 protected_paths:
@@ -47,7 +47,7 @@ ci_workflows:
   - Workers Test
 
 runner:
-  node_version: '22'
+  node_version: "22"
   install: npm ci
 
 spend_cap_usd: 20
