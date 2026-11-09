@@ -15,6 +15,7 @@ test('loadConfig applies every default to the smallest config', () => {
   assert.equal(config.reviews_timeout_minutes, 30);
   assert.equal(config.spend_cap_usd, 20);
   assert.equal(config.max_turns, 200);
+  assert.equal(config.max_babysit_rounds, 5);
   assert.equal(config.timeout_minutes, 80);
   assert.equal(config.change_id_max_length, 42);
   assert.deepEqual(config.runner, { node_version: '22', install: 'npm ci' });
