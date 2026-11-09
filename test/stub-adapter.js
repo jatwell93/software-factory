@@ -1,11 +1,11 @@
-"use strict";
+'use strict';
 
 /**
  * An in-memory adapter that meets the contract. It is the reference for what
  * the shared suite expects, and the test double the factory's own tests can use.
  */
 
-const { FIXTURE } = require("../adapters/contract-suite.js");
+const { FIXTURE } = require('../adapters/contract-suite.js');
 
 function createStubAdapter() {
   const changes = new Map();
@@ -22,7 +22,7 @@ function createStubAdapter() {
   };
 
   return {
-    name: "stub",
+    name: 'stub',
     listChanges: () => [...changes.keys()].map((id) => ({ id })),
     listTasks: (changeId) => need(changeId).tasks.map((task) => ({ ...task })),
     readAutonomy: (changeId) => ({ ...need(changeId).autonomy }),
@@ -39,7 +39,7 @@ function createStubAdapter() {
       if (changes.has(changeId)) throw new Error(`change ${changeId} exists`);
       changes.set(changeId, {
         tasks: [],
-        autonomy: { merge: "human", pr: "per-task", noGo: [] },
+        autonomy: { merge: 'human', pr: 'per-task', noGo: [] },
       });
       return { path: `changes/${changeId}` };
     },

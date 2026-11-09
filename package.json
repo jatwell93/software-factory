@@ -11,8 +11,11 @@
   "scripts": {
     "test": "node --test \"test/**/*.test.js\""
   },
-  "devDependencies": {
+  "dependencies": {
     "ajv": "^8.20.0",
     "yaml": "^2.9.1"
+  },
+  "devDependencies": {
+    "prettier": "3.9.10"
   }
 }
