@@ -436,3 +436,26 @@ test('--summary combined with --quiet-minutes reports the quiet window', () => {
     /waitingOn=checks,quiet window /,
   );
 });
+
+test('a passed check does not count as pending because another workflow has a pending check of the same name', () => {
+  const checks = summarizeChecks(
+    [
+      { name: 'test', bucket: 'pass', workflow: 'Workers Test' },
+      { name: 'test', bucket: 'pending', workflow: 'Some Other Workflow' },
+    ],
+    CI,
+  );
+  assert.deepEqual(checks.pendingActions, [], 'the pending one is not a configured workflow');
+  assert.deepEqual(checks.pending, ['test']);
+});
+
+test('a pending check of a configured workflow is listed once even when a passed one shares its name', () => {
+  const checks = summarizeChecks(
+    [
+      { name: 'test', bucket: 'pass', workflow: 'Workers Test' },
+      { name: 'test', bucket: 'pending', workflow: 'Frontend Test & Coverage' },
+    ],
+    CI,
+  );
+  assert.deepEqual(checks.pendingActions, ['test']);
+});

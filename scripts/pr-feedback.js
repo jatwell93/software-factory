@@ -110,12 +110,13 @@ function summarizeChecks(rows, ciWorkflows = []) {
     if (row.bucket === 'pass') summary.pass += 1;
     else if (row.bucket === 'fail' || row.bucket === 'cancel') summary.fail.push(row.name);
     else if (row.bucket === 'skipping') summary.skipped += 1;
-    else summary.pending.push(row.name);
+    else {
+      summary.pending.push(row.name);
+      // Decided on this row, not by name: workflows share job names such as
+      // `test`, so a passed check must not count because another is pending.
+      if (waitedFor.has(row.workflow)) summary.pendingActions.push(row.name);
+    }
   }
-  summary.pendingActions = (rows || [])
-    .filter((row) => waitedFor.has(row.workflow))
-    .filter((row) => summary.pending.includes(row.name))
-    .map((row) => row.name);
   return summary;
 }
 
