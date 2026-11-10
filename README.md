@@ -8,6 +8,8 @@ Plan a change with an agent, then let it build the change task by task as pull r
 - `adapters/contract.d.ts`, `contract.js` and `contract-suite.js`: the interface a spec framework implements, and the shared tests every adapter must pass. OpenSpec comes first; others can follow.
 - `examples/`: a sample config.
 - `scripts/check-no-go.js`: fails when a factory branch or PR touches a protected path (the factory's baseline in `lib/baseline.js`, the project's `protected_paths`, and the change's own list).
+- `scripts/pr-feedback.js`: one report of a PR's checks, unresolved threads and reviews, and when it has settled; also replies to and resolves threads. Which CI workflows it waits for is the config's `ci_workflows`.
+- `scripts/babysit-round.js`: counts the fix rounds already pushed to a branch, so the cap (`max_babysit_rounds`) holds across separate runs.
 - `scripts/check-change-ids.js`: fails on a change folder whose id the factory cannot run.
 
 ```
