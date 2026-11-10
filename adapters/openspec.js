@@ -52,6 +52,22 @@ function blockedIds(text, known) {
   return (text.match(/[0-9]+(?:\.[0-9A-Za-z]+)*/g) || []).filter((id) => known.has(id));
 }
 
+/**
+ * The line index of each task id's own line. A numbered sub-item repeating a
+ * task's number (an indented `- [ ] 1.3`) never stands for the task: the
+ * least-indented line wins, the first among equals.
+ */
+function taskLineIndexes(lines) {
+  const best = new Map();
+  lines.forEach((line, i) => {
+    const m = TASK_LINE.exec(line);
+    if (!m || !TASK_NUMBER.test(m[3])) return;
+    const held = best.get(m[3]);
+    if (!held || m[1].length < held.indent) best.set(m[3], { indent: m[1].length, index: i });
+  });
+  return new Set([...best.values()].map((b) => b.index));
+}
+
 /** The numbered tasks of a tasks.md. Unnumbered checkboxes (notes) are skipped. */
 function parseTasks(tasksMd) {
   const lines = (tasksMd || '').split(/\r?\n/);
@@ -61,10 +77,11 @@ function parseTasks(tasksMd) {
       .filter((m) => m && TASK_NUMBER.test(m[3]))
       .map((m) => m[3]),
   );
+  const own = taskLineIndexes(lines);
   const tasks = [];
   lines.forEach((line, i) => {
     const m = TASK_LINE.exec(line);
-    if (!m || !TASK_NUMBER.test(m[3])) return;
+    if (!m || !TASK_NUMBER.test(m[3]) || !own.has(i)) return;
     const owner = /^\(owner\)(\s|$)/.test(m[4]);
     const text = m[4].replace(/^\(owner\)\s*/, '');
     const ticket = /\(#([1-9][0-9]*)\):/.exec(text);
@@ -227,11 +244,12 @@ function createOpenSpecAdapter({
       const text = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
       let found = false;
       // Split on the line ending but keep it, so a CRLF file stays CRLF.
-      const out = text
-        .split(/(?<=\n)/)
-        .map((line) => {
+      const rows = text.split(/(?<=\n)/);
+      const own = taskLineIndexes(rows.map((row) => row.replace(/\r?\n$/, '')));
+      const out = rows
+        .map((line, i) => {
           const m = TASK_LINE.exec(line.replace(/\r?\n$/, ''));
-          if (!m || m[3] !== taskId || !TASK_NUMBER.test(m[3])) return line;
+          if (!m || m[3] !== taskId || !TASK_NUMBER.test(m[3]) || !own.has(i)) return line;
           found = true;
           return m[2] === ' ' ? line.replace('- [ ] ', '- [x] ') : line;
         })

@@ -442,3 +442,24 @@ test(
     assert.deepEqual(adapter.setup(root), { changed: false });
   },
 );
+
+test('a numbered sub-item repeating a task number never stands for the task', () => {
+  const md = '- [ ] 1.1 Real (#800):\n  - [ ] 1.2 sub (#900):\n- [ ] 1.2 Own (#801):\n';
+  const tasks = parseTasks(md);
+  assert.deepEqual(
+    tasks.map((t) => [t.id, t.issue]),
+    [
+      ['1.1', 800],
+      ['1.2', 801],
+    ],
+  );
+});
+
+test('tickTask ticks the task line, not a sub-item with the same number', () => {
+  const root = project({
+    'openspec/changes/fix-one/tasks.md': '  - [ ] 1.2 sub\n- [ ] 1.2 Own\n',
+  });
+  const file = path.join(root, 'openspec/changes/fix-one/tasks.md');
+  adapterFor(root).tickTask('fix-one', '1.2');
+  assert.equal(fs.readFileSync(file, 'utf8'), '  - [ ] 1.2 sub\n- [x] 1.2 Own\n');
+});
