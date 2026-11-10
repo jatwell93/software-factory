@@ -21,6 +21,7 @@ const { assertAdapter, OPERATIONS } = require('./contract.js');
 
 const FIXTURE = {
   changeId: 'fix-one',
+  title: 'Fix one',
   tasks: [
     { id: '1.1', done: false, owner: false, blockedBy: [] },
     { id: '1.2', done: false, owner: true, blockedBy: ['1.1'] },
@@ -50,7 +51,7 @@ function defineContractTests(name, create) {
   t('has a name and every operation', (adapter) => {
     assertAdapter(adapter);
     assert.equal(adapter.name, name);
-    assert.equal(OPERATIONS.length, 7);
+    assert.equal(OPERATIONS.length, 9);
   });
 
   t('lists the active change', async (adapter) => {
@@ -99,6 +100,21 @@ function defineContractTests(name, create) {
   t('archives a change out of the active list', async (adapter) => {
     await adapter.archive(FIXTURE.changeId);
     assert.deepEqual(await adapter.listChanges(), []);
+  });
+
+  t('reports a change as archived only after it is archived', async (adapter) => {
+    assert.equal(await adapter.isArchived(FIXTURE.changeId), false);
+    assert.equal(await adapter.isArchived('no-such-change'), false, 'an unknown id never rejects');
+    await adapter.archive(FIXTURE.changeId);
+    assert.equal(await adapter.isArchived(FIXTURE.changeId), true);
+    assert.equal(await adapter.isArchived('no-such-change'), false);
+  });
+
+  t('names an archived change by its title, and nothing else', async (adapter) => {
+    assert.equal(await adapter.archivedTitle(FIXTURE.changeId), '', 'active: no archived title');
+    assert.equal(await adapter.archivedTitle('no-such-change'), '');
+    await adapter.archive(FIXTURE.changeId);
+    assert.equal(await adapter.archivedTitle(FIXTURE.changeId), FIXTURE.title);
   });
 
   t('scaffolds a new change and refuses a taken id', async (adapter) => {

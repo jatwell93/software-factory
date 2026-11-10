@@ -9,7 +9,9 @@ const { FIXTURE } = require('../adapters/contract-suite.js');
 
 function createStubAdapter() {
   const changes = new Map();
+  const archived = new Map();
   changes.set(FIXTURE.changeId, {
+    title: FIXTURE.title,
     tasks: FIXTURE.tasks.map((task) => ({ ...task, title: `Task ${task.id}` })),
     autonomy: { ...FIXTURE.autonomy, noGo: [...FIXTURE.autonomy.noGo] },
   });
@@ -32,12 +34,13 @@ function createStubAdapter() {
       task.done = true;
     },
     archive(changeId) {
-      need(changeId);
+      archived.set(changeId, need(changeId));
       changes.delete(changeId);
     },
-    scaffold(changeId) {
+    scaffold(changeId, { title } = {}) {
       if (changes.has(changeId)) throw new Error(`change ${changeId} exists`);
       changes.set(changeId, {
+        title: title || changeId,
         tasks: [],
         autonomy: { merge: 'human', pr: 'per-task', noGo: [] },
       });
@@ -48,6 +51,8 @@ function createStubAdapter() {
       isSetUp = true;
       return { changed };
     },
+    isArchived: (changeId) => archived.has(changeId),
+    archivedTitle: (changeId) => archived.get(changeId)?.title ?? '',
   };
 }
 

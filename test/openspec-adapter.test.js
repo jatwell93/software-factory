@@ -8,11 +8,17 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 const { defineContractTests } = require('../adapters/contract-suite.js');
-const { createOpenSpecAdapter, cmdArgs, parseTasks } = require('../adapters/openspec.js');
+const {
+  createOpenSpecAdapter,
+  cmdArgs,
+  isArchiveOf,
+  parseTasks,
+  titleOf,
+} = require('../adapters/openspec.js');
 const { NoGoFormatError } = require('../lib/openspec-reads.js');
 
 const PROPOSAL = [
-  '# Proposal',
+  '# Proposal: Fix one',
   '',
   '## Autonomy',
   '',
@@ -207,12 +213,22 @@ test('a folder without a proposal.md is not a change; a badly named one with a p
   const root = project({
     'openspec/changes/stray/notes.md': 'x',
     'openspec/changes/Bad-Name/proposal.md': PROPOSAL,
+    // The archive holds finished changes, never an active one, even with a stray proposal.
+    'openspec/changes/archive/proposal.md': PROPOSAL,
   });
   const ids = adapterFor(root)
     .listChanges()
     .map((c) => c.id)
     .sort();
   assert.deepEqual(ids, ['Bad-Name', 'fix-one']);
+});
+
+test('a change whose proposal.md is empty is still a change', () => {
+  const root = project({ 'openspec/changes/blank/proposal.md': '' });
+  const adapter = adapterFor(root);
+  assert.ok(adapter.listChanges().some((c) => c.id === 'blank'));
+  assert.deepEqual(adapter.listTasks('blank'), []);
+  assert.deepEqual(adapter.readAutonomy('blank'), { merge: 'human', pr: 'per-task', noGo: [] });
 });
 
 test('archive runs the openspec CLI with -y on the change', () => {
@@ -310,6 +326,106 @@ test('parseTasks keeps only blockers that are tasks of the same file', () => {
     ].join('\n'),
   );
   assert.deepEqual(tasks[2].blockedBy, ['1.2', '1.1'], 'order kept; 9.9 and 2 dropped');
+});
+
+test('isArchiveOf matches only <date>-<exact id>', () => {
+  assert.equal(isArchiveOf('2026-01-01-fix-one', 'fix-one'), true);
+  assert.equal(isArchiveOf('2026-01-01-other-fix-one', 'fix-one'), false);
+  assert.equal(isArchiveOf('2026-01-01-fix-one-more', 'fix-one'), false);
+  assert.equal(isArchiveOf('2026-1-1-fix-one', 'fix-one'), false);
+  assert.equal(isArchiveOf('fix-one', 'fix-one'), false);
+});
+
+test('titleOf drops a Proposal: prefix in any case and keeps an acronym as written', () => {
+  assert.equal(titleOf('# Proposal: Fix one\n\nbody'), 'Fix one');
+  assert.equal(titleOf('# proposal: Fix one'), 'Fix one');
+  assert.equal(titleOf('# API change for sales\n'), 'API change for sales');
+  assert.equal(titleOf('no heading here'), '');
+  assert.equal(titleOf(null), '');
+  assert.equal(titleOf('## Not the top heading\n# Real one'), 'Real one');
+});
+
+test('isArchived and archivedTitle read the archive folder, matching the exact id', () => {
+  const root = project({
+    'openspec/changes/archive/2026-01-01-done-one/proposal.md': '# Proposal: Done one\n',
+    'openspec/changes/archive/2026-01-02-other-done-one/proposal.md': '# Proposal: Other\n',
+    'openspec/changes/archive/2026-01-03-no-heading/proposal.md': 'text only\n',
+    'openspec/changes/archive/2026-01-04-no-proposal/notes.md': 'x\n',
+    'openspec/changes/archive/2026-01-05-a-file': 'not a folder',
+  });
+  const adapter = adapterFor(root);
+  assert.equal(adapter.isArchived('done-one'), true);
+  assert.equal(adapter.archivedTitle('done-one'), 'Done one');
+  assert.equal(adapter.isArchived('one'), false, 'a suffix of another id is not a match');
+  assert.equal(adapter.archivedTitle('other-done-one'), 'Other');
+  assert.equal(adapter.archivedTitle('no-heading'), '');
+  assert.equal(adapter.isArchived('no-proposal'), true);
+  assert.equal(adapter.archivedTitle('no-proposal'), '');
+  assert.equal(adapter.isArchived('a-file'), false, 'a file is not an archived change');
+});
+
+test('isArchived and archivedTitle never reject, even for an id that is not a folder name', () => {
+  const adapter = adapterFor(project());
+  for (const id of ['../changes/fix-one', 'a/b', 'a\\b', '..', '.', '']) {
+    assert.equal(adapter.isArchived(id), false, JSON.stringify(id));
+    assert.equal(adapter.archivedTitle(id), '', JSON.stringify(id));
+  }
+});
+
+/** An in-memory source: a map of relative paths to text. */
+function mapSource(files) {
+  const paths = Object.keys(files);
+  return {
+    read: (rel) => (rel in files ? files[rel] : null),
+    list(rel) {
+      const prefix = `${rel}/`;
+      const seen = new Map();
+      for (const p of paths.filter((x) => x.startsWith(prefix))) {
+        const rest = p.slice(prefix.length);
+        const [name, ...more] = rest.split('/');
+        seen.set(name, more.length > 0);
+      }
+      return [...seen].map(([name, dir]) => ({ name, dir }));
+    },
+  };
+}
+
+test('an adapter over another source reads from it, not from the disk', () => {
+  const emptyRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'openspec-empty-'));
+  const adapter = createOpenSpecAdapter({
+    root: emptyRoot,
+    source: mapSource({
+      'openspec/changes/on-branch/proposal.md': PROPOSAL,
+      'openspec/changes/on-branch/tasks.md': TASKS,
+      'openspec/changes/archive/2026-01-01-gone/proposal.md': '# Proposal: Gone\n',
+    }),
+  });
+  assert.deepEqual(adapter.listChanges(), [{ id: 'on-branch' }]);
+  assert.equal(adapter.listTasks('on-branch').length, 3);
+  assert.deepEqual(adapter.readAutonomy('on-branch').noGo, ['docs/**']);
+  assert.equal(adapter.isArchived('gone'), true);
+  assert.equal(adapter.archivedTitle('gone'), 'Gone');
+  assert.throws(() => adapter.listTasks('fix-one'), /no active change/);
+});
+
+test('an adapter over another source refuses every write and touches no file', () => {
+  const emptyRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'openspec-empty-'));
+  const source = mapSource({
+    'openspec/changes/on-branch/proposal.md': PROPOSAL,
+    'openspec/changes/on-branch/tasks.md': TASKS,
+  });
+  const calls = [];
+  const adapter = createOpenSpecAdapter({
+    root: emptyRoot,
+    source,
+    run: fakeCli(emptyRoot, calls),
+  });
+  assert.throws(() => adapter.tickTask('on-branch', '1.1'), /read-only/);
+  assert.throws(() => adapter.archive('on-branch'), /read-only/);
+  assert.throws(() => adapter.scaffold('new-thing'), /read-only/);
+  assert.throws(() => adapter.setup(emptyRoot), /read-only/);
+  assert.deepEqual(calls, []);
+  assert.deepEqual(fs.readdirSync(emptyRoot), []);
 });
 
 const hasCli =

@@ -14,6 +14,8 @@ const OPERATIONS = [
   'archive',
   'scaffold',
   'setup',
+  'isArchived',
+  'archivedTitle',
 ];
 
 /** The operations the adapter does not implement as functions. */
