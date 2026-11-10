@@ -13,6 +13,8 @@ Plan a change with an agent, then let it build the change task by task as pull r
 - `scripts/pr-feedback.js`: one report of a PR's checks, unresolved threads and reviews, and when it has settled; also replies to and resolves threads. Which CI workflows it waits for is the config's `ci_workflows`.
 - `scripts/babysit-round.js`: counts the fix rounds already pushed to a branch, so the cap (`max_babysit_rounds`) holds across separate runs.
 - `scripts/factory-route.js`, `lib/router.js`, `lib/router-deps.js`: decide what one GitHub event means (run a task, babysit a PR, archive, escalate, or nothing). The rules are pure and take their label names, owner and id limit from the config; the GitHub and project reads go through the spec-source adapter and `lib/github-source.js`.
+- `scripts/factory-issue.js`, `scripts/factory-ticket.js`, `scripts/factory-retry.js`, `lib/tracking-issue.js`: find or create a change's tracking issue; print the `Closes #n` line for a task's ticket; record a failed or successful run for the retry-once rule. Labels and owner come from the config, task and issue reads from the adapter.
+- `lib/cli.js`: runs a script and turns a bad config or malformed spec file into exit code 2.
 - `lib/adapters.js`: loads the adapter the config's `spec_source` names.
 - `scripts/check-change-ids.js`: fails on a change folder whose id the factory cannot run.
 
