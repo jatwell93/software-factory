@@ -64,4 +64,17 @@ export interface SpecSourceAdapter {
    * Safe to run again: the second run reports changed: false.
    */
   setup(projectRoot: string): MaybePromise<{ changed: boolean }>;
+
+  /**
+   * True when the change has been archived. False for an active or unknown
+   * change: it never rejects, so the router can ask about any id.
+   */
+  isArchived(changeId: string): MaybePromise<boolean>;
+
+  /**
+   * The archived change's title (its proposal heading, without a "Proposal:"
+   * prefix), or '' when the change is not archived or has no heading. The
+   * factory names a finished per-change PR after it.
+   */
+  archivedTitle(changeId: string): MaybePromise<string>;
 }

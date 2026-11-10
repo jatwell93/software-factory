@@ -16,7 +16,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { ID_PATTERN, idProblem } = require('../lib/change-id.js');
-const { parseNoGo, changeFolders, changesDir } = require('../lib/openspec-reads.js');
+const { parseNoGo, changesDir } = require('../lib/openspec-reads.js');
 
 const NAME = 'openspec';
 const TASK_NUMBER = /^[0-9][0-9A-Za-z.]{0,19}$/;
@@ -110,9 +110,42 @@ const defaultRun = (args, { cwd }) =>
     ? execFileSync('openspec', cmdArgs(args), { cwd, stdio: 'pipe', shell: true })
     : execFileSync('openspec', args, { cwd, stdio: 'pipe' });
 
+const CHANGES = 'openspec/changes';
+
+/** Reads the project files straight from disk. */
+function fsSource(root) {
+  return {
+    read(rel) {
+      const file = path.join(root, rel);
+      return fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null;
+    },
+    list(rel) {
+      const dir = path.join(root, rel);
+      if (!fs.existsSync(dir)) return [];
+      return fs
+        .readdirSync(dir, { withFileTypes: true })
+        .map((entry) => ({ name: entry.name, dir: entry.isDirectory() }));
+    },
+  };
+}
+
+/** True when an archive folder name is change `id`'s: `<YYYY-MM-DD>-<id>`. */
+const isArchiveOf = (name, id) =>
+  /^[0-9]{4}-[0-9]{2}-[0-9]{2}-/.test(name) && name.slice(11) === id;
+
+/** A proposal's title: its first heading without a "Proposal:" prefix, or ''. */
+function titleOf(proposal) {
+  const heading = /^# (.+)$/m.exec(proposal || '');
+  return heading ? heading[1].replace(/^Proposal:/i, '').trim() : '';
+}
+
 /**
  * @param {object} [options]
  * @param {string} [options.root] The project root, the folder that holds openspec/.
+ * @param {{read: (rel: string) => string|null, list: (rel: string) => {name: string, dir: boolean}[]}} [options.source]
+ *   Where files are read from, instead of the project's disk: the router passes a
+ *   GitHub-contents source to read a branch it has not checked out. An adapter
+ *   with a source is read-only.
  * @param {(args: string[], opts: {cwd: string}) => void} [options.run] Runs the openspec CLI; injected by tests.
  * @param {string} [options.tools] The agent tools `openspec init` configures (default claude).
  * @param {number} [options.maxIdLength] The longest id scaffold accepts.
@@ -120,37 +153,57 @@ const defaultRun = (args, { cwd }) =>
  */
 function createOpenSpecAdapter({
   root = process.cwd(),
+  source = null,
   run = defaultRun,
   tools = 'claude',
   maxIdLength = 42,
   now = () => new Date(),
 } = {}) {
+  const src = source || fsSource(root);
+  // A change id is a folder name, never a path: nothing here may walk out of changes/.
+  const isName = (changeId) => /^[^/\\]+$/.test(changeId) && changeId !== '.' && changeId !== '..';
+  const checkName = (changeId) => {
+    if (!isName(changeId)) throw new Error(`not a change id: ${changeId}`);
+  };
   const dirOf = (changeId) => {
-    // A folder name, never a path: nothing here may walk out of changes/.
-    if (!/^[^/\\]+$/.test(changeId) || changeId === '.' || changeId === '..') {
-      throw new Error(`not a change id: ${changeId}`);
-    }
+    checkName(changeId);
     return path.join(changesDir(root), changeId);
   };
+  // Writes go to the project's disk, so an adapter reading another source cannot make them.
+  const writable = () => {
+    if (source) throw new Error('this adapter reads a branch and is read-only');
+  };
+  const hasProposal = (changeId) => src.read(`${CHANGES}/${changeId}/proposal.md`) !== null;
   const need = (changeId) => {
-    const dir = dirOf(changeId);
-    if (changeId === 'archive' || !fs.existsSync(path.join(dir, 'proposal.md'))) {
+    checkName(changeId);
+    if (changeId === 'archive' || !hasProposal(changeId)) {
       throw new Error(`no active change ${changeId}`);
     }
-    return dir;
   };
   const read = (changeId, file) => {
-    const target = path.join(need(changeId), file);
-    return fs.existsSync(target) ? fs.readFileSync(target, 'utf8') : '';
+    need(changeId);
+    return src.read(`${CHANGES}/${changeId}/${file}`) ?? '';
+  };
+  /**
+   * The archive folder name of a change, or ''. An id that is not a folder name
+   * matches no entry (a folder name has no slash), so it needs no guard and
+   * never rejects.
+   */
+  const archiveDirOf = (changeId) => {
+    const entry = src
+      .list(`${CHANGES}/archive`)
+      .find((e) => e.dir && isArchiveOf(e.name, changeId));
+    return entry ? entry.name : '';
   };
 
   return {
     name: NAME,
 
     listChanges() {
-      return changeFolders(root)
-        .filter((id) => fs.existsSync(path.join(dirOf(id), 'proposal.md')))
-        .map((id) => ({ id }));
+      return src
+        .list(CHANGES)
+        .filter((e) => e.dir && e.name !== 'archive' && hasProposal(e.name))
+        .map((e) => ({ id: e.name }));
     },
 
     listTasks: (changeId) => parseTasks(read(changeId, 'tasks.md')),
@@ -168,7 +221,9 @@ function createOpenSpecAdapter({
     },
 
     tickTask(changeId, taskId) {
-      const file = path.join(need(changeId), 'tasks.md');
+      writable();
+      need(changeId);
+      const file = path.join(dirOf(changeId), 'tasks.md');
       const text = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
       let found = false;
       // Split on the line ending but keep it, so a CRLF file stays CRLF.
@@ -186,6 +241,7 @@ function createOpenSpecAdapter({
     },
 
     archive(changeId) {
+      writable();
       need(changeId);
       // The id reaches a command line: only a plain id, which has no shell characters.
       if (!ID_PATTERN.test(changeId)) {
@@ -195,6 +251,7 @@ function createOpenSpecAdapter({
     },
 
     scaffold(changeId, { title } = {}) {
+      writable();
       const problem = idProblem(changeId, maxIdLength);
       if (problem) throw new Error(problem);
       if (changeId === 'archive') throw new Error('archive is reserved for finished changes');
@@ -216,10 +273,19 @@ function createOpenSpecAdapter({
     },
 
     setup(projectRoot) {
+      writable();
       if (fs.existsSync(path.join(projectRoot, 'openspec', 'config.yaml')))
         return { changed: false };
       run(['init', '--tools', tools, '--no-animation', projectRoot], { cwd: projectRoot });
       return { changed: true };
+    },
+
+    isArchived: (changeId) => archiveDirOf(changeId) !== '',
+
+    archivedTitle(changeId) {
+      const dir = archiveDirOf(changeId);
+      if (!dir) return '';
+      return titleOf(src.read(`${CHANGES}/archive/${dir}/proposal.md`));
     },
   };
 }
@@ -228,6 +294,9 @@ module.exports = {
   NAME,
   createOpenSpecAdapter,
   cmdArgs,
+  fsSource,
+  isArchiveOf,
+  titleOf,
   parseTasks,
   autonomyBlock,
   issueFromProposal,
