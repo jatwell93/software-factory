@@ -8,7 +8,7 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 const { defineContractTests } = require('../adapters/contract-suite.js');
-const { createOpenSpecAdapter, parseTasks } = require('../adapters/openspec.js');
+const { createOpenSpecAdapter, cmdArgs, parseTasks } = require('../adapters/openspec.js');
 const { NoGoFormatError } = require('../lib/openspec-reads.js');
 
 const PROPOSAL = [
@@ -95,18 +95,21 @@ test('parseTasks reads owner, ticket, title and blocking edges', () => {
 test('parseTasks reads several blockers and ignores prose after them', () => {
   const tasks = parseTasks(
     [
+      '- [ ] 2.2 Second',
+      '- [ ] 2.3 Third',
       '- [ ] 2.4 Build it',
       '      Blocked by: 2.2, 2.3 and one clean run on the pinned ref.',
       '',
     ].join('\n'),
   );
-  assert.deepEqual(tasks[0].blockedBy, ['2.2', '2.3']);
+  assert.deepEqual(tasks[2].blockedBy, ['2.2', '2.3']);
 });
 
 test('parseTasks skips unnumbered checkboxes, reads indented ones, and stops a task at the next', () => {
   const tasks = parseTasks(
     [
       '- [ ] note without a number',
+      '- [ ] 2.9 Earlier task',
       '  - [ ] 3.1 Indented task',
       '      Blocked by: 2.9.',
       '- [ ] 3.2 Next task',
@@ -116,6 +119,7 @@ test('parseTasks skips unnumbered checkboxes, reads indented ones, and stops a t
   assert.deepEqual(
     tasks.map((t) => [t.id, t.blockedBy]),
     [
+      ['2.9', []],
       ['3.1', ['2.9']],
       ['3.2', []],
     ],
@@ -256,6 +260,56 @@ test('setup runs openspec init once, with the configured tools', () => {
   assert.deepEqual(adapter.setup(root), { changed: true });
   assert.deepEqual(adapter.setup(root), { changed: false });
   assert.deepEqual(calls, [['init', '--tools', 'none', '--no-animation', root]]);
+});
+
+test('scaffold refuses the reserved archive folder, even when no archive exists yet', () => {
+  const root = project();
+  assert.equal(fs.existsSync(path.join(root, 'openspec/changes/archive')), false);
+  assert.throws(() => adapterFor(root).scaffold('archive'), /reserved/);
+  assert.equal(fs.existsSync(path.join(root, 'openspec/changes/archive')), false);
+});
+
+test('archive refuses a folder whose name is not a plain id, so it never reaches a command line', () => {
+  const root = project({
+    'openspec/changes/a&calc/proposal.md': PROPOSAL,
+    'openspec/changes/Bad Name/proposal.md': PROPOSAL,
+  });
+  const calls = [];
+  const adapter = createOpenSpecAdapter({ root, run: fakeCli(root, calls) });
+  assert.throws(() => adapter.archive('a&calc'), /valid change id/);
+  assert.throws(() => adapter.archive('Bad Name'), /valid change id/);
+  assert.deepEqual(calls, []);
+});
+
+test('cmdArgs wraps each argument in double quotes', () => {
+  assert.deepEqual(cmdArgs(['archive', '-y', 'fix-one']), ['"archive"', '"-y"', '"fix-one"']);
+  assert.deepEqual(cmdArgs(['init', 'C:\\Program Files (x86)\\app']), [
+    '"init"',
+    '"C:\\Program Files (x86)\\app"',
+  ]);
+});
+
+test('cmdArgs doubles a trailing backslash so it cannot escape the closing quote', () => {
+  assert.deepEqual(cmdArgs(['C:\\temp\\']), ['"C:\\temp\\\\"']);
+  assert.deepEqual(cmdArgs(['C:\\temp\\\\']), ['"C:\\temp\\\\\\\\"']);
+});
+
+for (const bad of ['a&calc', 'a|b', 'a>b', 'a<b', 'a^b', 'say "hi"', '100%', 'a!b', 'a\nb']) {
+  test(`cmdArgs refuses an argument cmd.exe would act on: ${JSON.stringify(bad)}`, () => {
+    assert.throws(() => cmdArgs(['archive', '-y', bad]), /cannot be passed to cmd\.exe safely/);
+  });
+}
+
+test('parseTasks keeps only blockers that are tasks of the same file', () => {
+  const tasks = parseTasks(
+    [
+      '- [ ] 1.1 First',
+      '- [ ] 1.2 Second',
+      '- [ ] 1.3 Third',
+      '      Blocked by: 1.2, 9.9 and one clean run on 2 hosts, then 1.1.',
+    ].join('\n'),
+  );
+  assert.deepEqual(tasks[2].blockedBy, ['1.2', '1.1'], 'order kept; 9.9 and 2 dropped');
 });
 
 const hasCli =

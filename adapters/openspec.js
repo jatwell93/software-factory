@@ -15,7 +15,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
-const { idProblem } = require('../lib/change-id.js');
+const { ID_PATTERN, idProblem } = require('../lib/change-id.js');
 const { parseNoGo, changeFolders, changesDir } = require('../lib/openspec-reads.js');
 
 const NAME = 'openspec';
@@ -43,14 +43,24 @@ function perChangeFromProposal(text) {
   return /^pr:[ \t]*per-change[ \t]*(#.*)?$/m.test(autonomyBlock(text));
 }
 
-/** Task ids named on a `Blocked by:` line, in order. */
-function blockedIds(text) {
-  return (text.match(/[0-9]+(?:\.[0-9A-Za-z]+)*/g) || []).filter((id) => TASK_NUMBER.test(id));
+/**
+ * Task ids named on a `Blocked by:` line, in order. Only ids of tasks in the
+ * same file count: the line often ends in prose ("... on 2 hosts"), and a number
+ * in it is not a blocker.
+ */
+function blockedIds(text, known) {
+  return (text.match(/[0-9]+(?:\.[0-9A-Za-z]+)*/g) || []).filter((id) => known.has(id));
 }
 
 /** The numbered tasks of a tasks.md. Unnumbered checkboxes (notes) are skipped. */
 function parseTasks(tasksMd) {
   const lines = (tasksMd || '').split(/\r?\n/);
+  const known = new Set(
+    lines
+      .map((line) => TASK_LINE.exec(line))
+      .filter((m) => m && TASK_NUMBER.test(m[3]))
+      .map((m) => m[3]),
+  );
   const tasks = [];
   lines.forEach((line, i) => {
     const m = TASK_LINE.exec(line);
@@ -62,7 +72,7 @@ function parseTasks(tasksMd) {
     for (const next of lines.slice(i + 1)) {
       if (TASK_LINE.test(next) || /^#/.test(next)) break;
       const blocked = /^\s*Blocked by:\s*(.*)$/.exec(next);
-      if (blocked) blockedBy.push(...blockedIds(blocked[1]));
+      if (blocked) blockedBy.push(...blockedIds(blocked[1], known));
     }
     const task = {
       id: m[3],
@@ -77,8 +87,28 @@ function parseTasks(tasksMd) {
   return tasks;
 }
 
+// Characters cmd.exe acts on even inside double quotes.
+const CMD_UNSAFE = /["%^&|<>!\r\n]/;
+
+/**
+ * Arguments for a command run through cmd.exe, which Windows needs to start the
+ * openspec .cmd shim (Node refuses to spawn a .cmd without a shell). Each is
+ * wrapped in double quotes; one with a character cmd.exe would still act on is
+ * refused, because a folder named `a&calc` must never become a second command.
+ */
+function cmdArgs(args) {
+  return args.map((arg) => {
+    if (CMD_UNSAFE.test(arg))
+      throw new Error(`argument cannot be passed to cmd.exe safely: ${arg}`);
+    // A backslash before the closing quote would escape it, so double any at the end.
+    return `"${arg.replace(/(\\+)$/, '$1$1')}"`;
+  });
+}
+
 const defaultRun = (args, { cwd }) =>
-  execFileSync('openspec', args, { cwd, stdio: 'pipe', shell: process.platform === 'win32' });
+  process.platform === 'win32'
+    ? execFileSync('openspec', cmdArgs(args), { cwd, stdio: 'pipe', shell: true })
+    : execFileSync('openspec', args, { cwd, stdio: 'pipe' });
 
 /**
  * @param {object} [options]
@@ -157,12 +187,17 @@ function createOpenSpecAdapter({
 
     archive(changeId) {
       need(changeId);
+      // The id reaches a command line: only a plain id, which has no shell characters.
+      if (!ID_PATTERN.test(changeId)) {
+        throw new Error(`cannot archive ${changeId}: rename the folder to a valid change id first`);
+      }
       run(['archive', '-y', changeId], { cwd: root });
     },
 
     scaffold(changeId, { title } = {}) {
       const problem = idProblem(changeId, maxIdLength);
       if (problem) throw new Error(problem);
+      if (changeId === 'archive') throw new Error('archive is reserved for finished changes');
       const dir = dirOf(changeId);
       if (fs.existsSync(dir)) throw new Error(`change ${changeId} exists`);
       fs.mkdirSync(dir, { recursive: true });
@@ -192,6 +227,7 @@ function createOpenSpecAdapter({
 module.exports = {
   NAME,
   createOpenSpecAdapter,
+  cmdArgs,
   parseTasks,
   autonomyBlock,
   issueFromProposal,
