@@ -6,6 +6,7 @@ Plan a change with an agent, then let it build the change task by task as pull r
 
 - `schema/factory.config.schema.json`: every setting a project makes in its `factory.config.yml`.
 - `adapters/contract.d.ts`, `contract.js` and `contract-suite.js`: the interface a spec framework implements, and the shared tests every adapter must pass. OpenSpec comes first; others can follow.
+- `adapters/openspec.js`: the OpenSpec adapter (changes under `openspec/changes/<id>/`). It runs the shared contract suite, and its `setup` is also tested against the real `openspec` CLI when that is installed.
 - `examples/`: a sample config.
 - `scripts/check-no-go.js`: fails when a factory branch or PR touches a protected path (the factory's baseline in `lib/baseline.js`, the project's `protected_paths`, and the change's own list).
 - `scripts/pr-feedback.js`: one report of a PR's checks, unresolved threads and reviews, and when it has settled; also replies to and resolves threads. Which CI workflows it waits for is the config's `ci_workflows`.
