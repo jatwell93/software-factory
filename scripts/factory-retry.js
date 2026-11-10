@@ -23,6 +23,7 @@ const { execFileSync } = require('node:child_process');
 const { loadAdapter } = require('../lib/adapters.js');
 const { runCli } = require('../lib/cli.js');
 const { loadConfig } = require('../lib/config.js');
+const { ensureLabel, ensureNeedsHuman } = require('../lib/labels.js');
 const { createRouter } = require('../lib/router.js');
 const { trackingIssue } = require('../lib/tracking-issue.js');
 
@@ -44,7 +45,7 @@ function ensureLabels({ labels }, gh) {
     [labels.retry, 'Factory run failed; retried once an hour later'],
     [labels.retrying, 'Factory retry in progress; another failure escalates'],
   ]) {
-    gh(['label', 'create', name, '--force', '--color', 'FBCA04', '--description', description]);
+    ensureLabel(gh, name, 'FBCA04', description);
   }
 }
 
@@ -55,6 +56,7 @@ function fail(id, url, ctx, log) {
   const issue = JSON.parse(gh(['issue', 'view', number, '--json', 'labels,comments']));
   if (labelNames(issue).includes(labels.retrying)) {
     const first = firstRunLink(issue) || '(link not found)';
+    ensureNeedsHuman(gh, config);
     gh([
       'issue',
       'edit',

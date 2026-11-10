@@ -10,6 +10,20 @@ const RUN = 'https://github.com/octo/app/actions/runs/111';
 const RETRY_RUN = 'https://github.com/octo/app/actions/runs/222';
 const config = loadConfig(tempRoot());
 
+/** A config that renames the owner, the change prefix and every state label. */
+const renamedConfig = () =>
+  [
+    'spec_source: openspec',
+    'owner: boss',
+    'gates:',
+    '  - run: npm test',
+    'labels:',
+    '  change_prefix: "bot-"',
+    '  needs_human: stuck',
+    '  retry: again',
+    '  retrying: again-now',
+  ].join('\n');
+
 /** A fake `gh` with one open tracking issue (#714); records every call. */
 function fakeGh({ labels = [], comments = [], retrying = [] } = {}) {
   const calls = [];
@@ -66,6 +80,40 @@ test('a failed retry escalates with both run links and drops factory-retrying', 
   assert.doesNotMatch(body, /<!-- factory-retry run/, 'no marker: this is not a retry');
 });
 
+test('the needs-human label is created before the escalation adds it', () => {
+  // A fresh repository has no needs-human label, and `gh issue edit` fails on one it lacks.
+  const known = new Set(['factory-retrying']);
+  const inner = fakeGh({
+    labels: ['factory-retrying'],
+    comments: [{ body: `<!-- factory-retry run: ${RUN} -->` }],
+  });
+  const gh = (args) => {
+    if (args[0] === 'label') known.add(args[2]);
+    const added = args[args.indexOf('--add-label') + 1];
+    if (args.includes('--add-label') && !known.has(added)) throw new Error(`'${added}' not found`);
+    return inner.gh(args);
+  };
+  assert.equal(main(['fail', 'add-x', RETRY_RUN], io(gh)), 0);
+  const created = inner.calls.find((c) => c[0] === 'label' && c[2] === 'needs-human');
+  assert.ok(created, 'created with --force');
+  assert.ok(created.includes('--force'));
+  const renamed = loadConfig(tempRoot({}, { config: renamedConfig() }));
+  known.clear();
+  known.add('again-now');
+  const second = fakeGh({
+    labels: ['again-now'],
+    comments: [{ body: `<!-- factory-retry run: ${RUN} -->` }],
+  });
+  const gh2 = (args) => {
+    if (args[0] === 'label') known.add(args[2]);
+    const added = args[args.indexOf('--add-label') + 1];
+    if (args.includes('--add-label') && !known.has(added)) throw new Error(`'${added}' not found`);
+    return second.gh(args);
+  };
+  assert.equal(main(['fail', 'add-x', RETRY_RUN], io(gh2, renamed)), 0);
+  assert.ok(second.calls.some((c) => c[0] === 'label' && c[2] === 'stuck'));
+});
+
 test('a success removes factory-retrying, and does nothing when it is absent', () => {
   const withLabel = fakeGh({ retrying: [{ number: 714 }] });
   assert.equal(main(['ok', 'add-x'], io(withLabel.gh)), 0);
@@ -92,24 +140,7 @@ test('rejects a bad command, change id or run url before calling gh', () => {
 });
 
 test('renamed labels and a renamed owner are used throughout', () => {
-  const renamed = loadConfig(
-    tempRoot(
-      {},
-      {
-        config: [
-          'spec_source: openspec',
-          'owner: boss',
-          'gates:',
-          '  - run: npm test',
-          'labels:',
-          '  change_prefix: "bot-"',
-          '  needs_human: stuck',
-          '  retry: again',
-          '  retrying: again-now',
-        ].join('\n'),
-      },
-    ),
-  );
+  const renamed = loadConfig(tempRoot({}, { config: renamedConfig() }));
   const first = fakeGh();
   main(['fail', 'add-x', RUN], io(first.gh, renamed));
   assert.deepEqual(edits(first.calls), [['issue', 'edit', '714', '--add-label', 'again']]);
