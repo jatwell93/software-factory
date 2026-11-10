@@ -21,7 +21,14 @@ function main(env = process.env, { root = process.cwd(), log = console.log, deps
   const config = loadConfig(root);
   const event = JSON.parse(fs.readFileSync(env.GITHUB_EVENT_PATH, 'utf8'));
   const { route } = createRouter(config);
-  log(toOutput(route(env.GITHUB_EVENT_NAME, event, deps || createDeps(config))));
+  try {
+    log(toOutput(route(env.GITHUB_EVENT_NAME, event, deps || createDeps(config))));
+  } catch (error) {
+    // A malformed spec file (say a bad no_go list) holds the change with a reason;
+    // any other failure is a bug or an outage and must stay a red job.
+    if (!error.userError) throw error;
+    log(toOutput({ mode: 'none', reason: `${error.message}; fix the change's proposal` }));
+  }
   return 0;
 }
 

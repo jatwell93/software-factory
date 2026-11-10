@@ -227,3 +227,33 @@ test('the route job fails on a project without a valid config', () => {
     /cannot read/,
   );
 });
+
+test('a proposal with a malformed no_go holds its change with a reason, not a crash', () => {
+  const root = tempRoot({
+    odd: '# Odd\n\n## Autonomy\n\n```yaml\nmerge: human\npr: per-change\nno_go: nonsense\n```\n',
+  });
+  fs.mkdirSync(path.join(root, 'openspec/changes/odd'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'openspec/changes/odd/tasks.md'), '- [ ] 1.1 Do it\n');
+  const eventFile = path.join(root, 'event.json');
+  fs.writeFileSync(eventFile, JSON.stringify({ inputs: { change_id: 'odd' } }));
+  const env = { GITHUB_EVENT_NAME: 'workflow_dispatch', GITHUB_EVENT_PATH: eventFile };
+  const lines = [];
+  const real = createDeps(config, { adapter: loadAdapter(config, { root }), gh: fakeGh().gh });
+  assert.equal(main(env, { root, log: (s) => lines.push(s), deps: real }), 0);
+  assert.match(lines[0], /^mode=none\n/);
+  assert.match(lines[0], /unrecognised no_go value: no_go: nonsense; fix the change's proposal/);
+});
+
+test('any other routing failure stays an error', () => {
+  const root = tempRoot();
+  const eventFile = path.join(root, 'event.json');
+  fs.writeFileSync(eventFile, JSON.stringify({ inputs: { change_id: CHANGE } }));
+  const broken = {
+    ...deps(),
+    changeExists: () => {
+      throw new Error('HTTP 502');
+    },
+  };
+  const env = { GITHUB_EVENT_NAME: 'workflow_dispatch', GITHUB_EVENT_PATH: eventFile };
+  assert.throws(() => main(env, { root, deps: broken }), /HTTP 502/);
+});
