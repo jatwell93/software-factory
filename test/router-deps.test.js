@@ -55,6 +55,20 @@ test('the tracking-issue lookups use the configured change prefix and state labe
   assert.deepEqual(other.calls[0].slice(5, 8), ['bot-fix-one', '--label', 'stuck']);
 });
 
+test('the retrying lookup uses the configured retrying label', () => {
+  const calls = [];
+  const gh = (args) => {
+    calls.push(args);
+    return '[{"number":9}]';
+  };
+  assert.equal(deps({ gh }).retryingIssue(CHANGE), 9);
+  assert.ok(calls[0].includes('factory-retrying') && calls[0].includes('factory:fix-one'));
+  const renamed = loadConfig(tempRoot({}, { extraConfig: ['labels:', '  retrying: again-now'] }));
+  const other = [];
+  deps({ gh: (a) => (other.push(a), '[]') }, renamed).retryingIssue(CHANGE);
+  assert.ok(other[0].includes('again-now'));
+});
+
 test('retry candidates carry when the retry label was last added', () => {
   const events = [
     [
