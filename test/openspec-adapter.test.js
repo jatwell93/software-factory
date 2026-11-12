@@ -12,10 +12,12 @@ const {
   createOpenSpecAdapter,
   cmdArgs,
   isArchiveOf,
+  NoGoFormatError,
+  changeFoldersIn,
+  parseNoGo,
   parseTasks,
   titleOf,
 } = require('../adapters/openspec.js');
-const { NoGoFormatError } = require('../lib/openspec-reads.js');
 
 const PROPOSAL = [
   '# Proposal: Fix one',
@@ -462,4 +464,26 @@ test('tickTask ticks the task line, not a sub-item with the same number', () => 
   const file = path.join(root, 'openspec/changes/fix-one/tasks.md');
   adapterFor(root).tickTask('fix-one', '1.2');
   assert.equal(fs.readFileSync(file, 'utf8'), '  - [ ] 1.2 sub\n- [x] 1.2 Own\n');
+});
+
+test('changeFoldersIn names each touched change once and never the archive', () => {
+  const folders = changeFoldersIn([
+    'openspec/changes/one/proposal.md',
+    'openspec/changes/one/tasks.md',
+    'openspec/changes/two/specs/a/spec.md',
+    'openspec/changes/archive/2026-01-01-old/x.md',
+    'openspec/changes/loose-file.md',
+    'src/app.js',
+  ]);
+  assert.deepEqual(folders, ['one', 'two']);
+  assert.deepEqual(changeFoldersIn([' openspec/changes/padded/x.md ']), ['padded']);
+});
+
+test('the adapter reads a folder with an odd name, so no list is skipped', () => {
+  const root = project({
+    'openspec/changes/Odd Name/proposal.md': PROPOSAL.replace('docs/**', 'secret/**'),
+  });
+  const adapter = adapterFor(root);
+  assert.ok(adapter.listChanges().some((c) => c.id === 'Odd Name'));
+  assert.deepEqual(adapter.readAutonomy('Odd Name').noGo, ['secret/**']);
 });

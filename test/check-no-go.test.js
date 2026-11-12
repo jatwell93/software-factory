@@ -8,12 +8,15 @@ const { loadConfig } = require('../lib/config.js');
 const {
   factoryScope,
   globToRegExp,
-  parseNoGo,
   patternsFor,
   findMatches,
   main,
 } = require('../scripts/check-no-go.js');
+const { loadAdapter } = require('../lib/adapters.js');
+const { parseNoGo } = require('../adapters/openspec.js');
 const { tempRoot, fakeIo } = require('./helpers.js');
+
+const adapterFor = (root) => loadAdapter(loadConfig(root), { root });
 
 const PROPOSAL = [
   '# Proposal',
@@ -85,21 +88,21 @@ test('parseNoGo keeps items after blank and comment lines, and reads flow lists'
 test('patternsFor adds the project and change lists to the baseline and never drops it', () => {
   const root = tempRoot({ shrink: PROPOSAL }, { extraConfig: ['protected_paths:', '  - db/**'] });
   const config = loadConfig(root);
-  const patterns = patternsFor('shrink', root, config);
+  const patterns = patternsFor('shrink', adapterFor(root), config);
   for (const p of BASELINE) assert.ok(patterns.includes(p), `baseline ${p} kept`);
   assert.ok(patterns.includes('frontend/src/legacy/**'));
   assert.ok(patterns.includes('db/**'));
-  assert.deepEqual(patternsFor('', root, config), [...BASELINE, 'db/**']);
-  assert.deepEqual(patternsFor('missing-change', root, config), [...BASELINE, 'db/**']);
+  assert.deepEqual(patternsFor('', adapterFor(root), config), [...BASELINE, 'db/**']);
+  assert.deepEqual(patternsFor('missing-change', adapterFor(root), config), [...BASELINE, 'db/**']);
 });
 
 test('a --change that is not a plain id reads no folder, so it cannot walk out of changes/', () => {
   const root = tempRoot({ shrink: PROPOSAL });
   // Both spellings resolve to the real openspec/changes/shrink/proposal.md, so
   // only the id check keeps its no_go list out of the result.
-  assert.deepEqual(patternsFor('../changes/shrink', root), BASELINE);
-  assert.deepEqual(patternsFor('shrink/../shrink', root), BASELINE);
-  assert.ok(patternsFor('shrink', root).includes('workers/wrangler.toml'));
+  assert.deepEqual(patternsFor('../changes/shrink', adapterFor(root)), BASELINE);
+  assert.deepEqual(patternsFor('shrink/../shrink', adapterFor(root)), BASELINE);
+  assert.ok(patternsFor('shrink', adapterFor(root)).includes('workers/wrangler.toml'));
 });
 
 test('findMatches reports protected paths only, once each', () => {
@@ -253,7 +256,7 @@ test('--change all applies every active change list, skipping the archive', () =
     other,
     archive: PROPOSAL.replace('frontend', 'zzz'),
   });
-  const patterns = patternsFor('all', root);
+  const patterns = patternsFor('all', adapterFor(root));
   for (const p of [...BASELINE, 'frontend/src/legacy/**', 'docs/other/**']) {
     assert.ok(patterns.includes(p), `${p} applies`);
   }
@@ -269,10 +272,15 @@ test('--change all applies every active change list, skipping the archive', () =
 test('--change all also applies the list of a folder whose name is not a valid id', () => {
   const bad = PROPOSAL.replace('frontend/src/legacy/**', 'docs/capital/**');
   const root = tempRoot({ 'Bad-Name': bad });
-  assert.ok(patternsFor('all', root).includes('docs/capital/**'));
+  assert.ok(patternsFor('all', adapterFor(root)).includes('docs/capital/**'));
 });
 
 test('a protected path containing a newline still matches', () => {
   const io = fakeIo({ diff: '.claude/a\nb.md\0' });
   assert.equal(main([], io, tempRoot({})), 1);
+});
+
+test("a --change naming a badly named folder still reads that folder's list", () => {
+  const root = tempRoot({ 'Odd Name': PROPOSAL });
+  assert.ok(patternsFor('Odd Name', adapterFor(root)).includes('frontend/src/legacy/**'));
 });

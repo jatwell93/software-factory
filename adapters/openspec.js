@@ -16,11 +16,83 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { ID_PATTERN, idProblem } = require('../lib/change-id.js');
-const { parseNoGo, changesDir } = require('../lib/openspec-reads.js');
 
 const NAME = 'openspec';
 const TASK_NUMBER = /^[0-9][0-9A-Za-z.]{0,19}$/;
 const TASK_LINE = /^(\s*)- \[([ xX])\] (\S+)\s+(.*)$/;
+
+/** Lines of the first yaml fence under `## Autonomy`, or []. */
+function autonomyYaml(lines) {
+  const heading = lines.findIndex((l) => /^##\s+Autonomy\s*$/.test(l));
+  const fence = lines.findIndex((l, i) => heading !== -1 && i > heading && /^```ya?ml\s*$/.test(l));
+  if (fence === -1) return [];
+  const body = lines.slice(fence + 1);
+  const end = body.findIndex((l) => /^```/.test(l));
+  return end === -1 ? body : body.slice(0, end);
+}
+
+/** A yaml scalar without its comment and quotes. */
+function scalar(text) {
+  return text
+    .replace(/\s+#.*$/, '')
+    .trim()
+    .replace(/^['"]|['"]$/g, '');
+}
+
+const isFiller = (line) => /^\s*(#.*)?$/.test(line);
+
+class NoGoFormatError extends Error {
+  /** The spec file is wrong, not the run: callers report it instead of crashing. */
+  userError = true;
+}
+
+/**
+ * The `no_go` list from the first yaml fence under `## Autonomy`, or [].
+ * Reads a block list (`  - path`, with blank and comment lines between items)
+ * or a one-line flow list (`no_go: [a, b]`). Any other shape throws
+ * NoGoFormatError instead of being read partly: a misread list would silently
+ * drop protected paths, so an unrecognised one fails the check.
+ */
+function parseNoGo(proposal) {
+  const yaml = autonomyYaml(proposal.split(/\r?\n/));
+  const key = yaml.findIndex((l) => /^no_go:/.test(l));
+  if (key === -1) return [];
+  const inline = scalar(yaml[key].slice('no_go:'.length));
+  if (inline) return flowList(inline, yaml[key]);
+  return blockList(yaml.slice(key + 1));
+}
+
+/** `[a, b]` to its items; any other inline value is unrecognised. */
+function flowList(inline, line) {
+  const flow = inline.match(/^\[(.*)\]$/);
+  if (!flow) throw new NoGoFormatError(`unrecognised no_go value: ${line.trim()}`);
+  return flow[1].split(',').map(scalar).filter(Boolean);
+}
+
+/** `- item` lines up to the next top-level key; an indented non-item is unrecognised. */
+function blockList(rest) {
+  // Items may be indented or not: YAML allows `- path` at the key's own column.
+  const end = rest.findIndex((l) => !isFiller(l) && !/^\s*-\s/.test(l));
+  if (end !== -1 && /^\s/.test(rest[end])) {
+    throw new NoGoFormatError(`unrecognised line in no_go list: ${rest[end].trim()}`);
+  }
+  return (end === -1 ? rest : rest.slice(0, end))
+    .filter((l) => !isFiller(l))
+    .map((l) => scalar(l.replace(/^\s*-\s+/, '')))
+    .filter(Boolean);
+}
+
+/**
+ * Folder names under changes/ that a list of changed paths touches, the archive
+ * excluded. Pure: it reads no file, so a deleted or renamed change still counts.
+ */
+function changeFoldersIn(paths) {
+  const names = paths
+    .map((p) => p.trim().match(/^openspec\/changes\/([^/]+)\//))
+    .filter((m) => m && m[1] !== 'archive')
+    .map((m) => m[1]);
+  return [...new Set(names)];
+}
 
 /** The body of the proposal's `## Autonomy` block, or ''. */
 function autonomyBlock(text) {
@@ -184,7 +256,7 @@ function createOpenSpecAdapter({
   };
   const dirOf = (changeId) => {
     checkName(changeId);
-    return path.join(changesDir(root), changeId);
+    return path.join(root, 'openspec', 'changes', changeId);
   };
   // Writes go to the project's disk, so an adapter reading another source cannot make them.
   const writable = () => {
@@ -305,6 +377,8 @@ function createOpenSpecAdapter({
       if (!dir) return '';
       return titleOf(src.read(`${CHANGES}/archive/${dir}/proposal.md`));
     },
+
+    changesIn: (paths) => changeFoldersIn(paths),
   };
 }
 
@@ -315,6 +389,9 @@ module.exports = {
   fsSource,
   isArchiveOf,
   titleOf,
+  parseNoGo,
+  NoGoFormatError,
+  changeFoldersIn,
   parseTasks,
   autonomyBlock,
   issueFromProposal,

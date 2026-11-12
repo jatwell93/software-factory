@@ -16,6 +16,7 @@ const OPERATIONS = [
   'setup',
   'isArchived',
   'archivedTitle',
+  'changesIn',
 ];
 
 /** The operations the adapter does not implement as functions. */

@@ -16,7 +16,7 @@
 const fs = require('node:fs');
 const { ConfigError, loadConfig, maxIdLength } = require('../lib/config.js');
 const { idProblem } = require('../lib/change-id.js');
-const { changeFolders, foldersInPaths } = require('../lib/openspec-reads.js');
+const { loadAdapter } = require('../lib/adapters.js');
 
 const USAGE = 'usage: check-change-ids.js [--files <path|->]';
 
@@ -40,9 +40,10 @@ function main(argv, io = defaultIo, root = process.cwd()) {
     io.error(`change ids: ${err.message}`);
     return 2;
   }
+  const adapter = loadAdapter(config, { root });
   const folders = useFiles
-    ? foldersInPaths(io.readFile(argv[1] === '-' ? 0 : argv[1]).split(/\r?\n/))
-    : changeFolders(root);
+    ? adapter.changesIn(io.readFile(argv[1] === '-' ? 0 : argv[1]).split(/\r?\n/))
+    : adapter.listChanges().map((c) => c.id);
   const max = maxIdLength(config);
   const bad = folders.map((f) => [f, idProblem(f, max)]).filter(([, why]) => why);
   if (bad.length === 0) {

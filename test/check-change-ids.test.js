@@ -6,7 +6,6 @@ const assert = require('node:assert/strict');
 const { idProblem } = require('../lib/change-id.js');
 const { maxIdLength, loadConfig } = require('../lib/config.js');
 const { main } = require('../scripts/check-change-ids.js');
-const { foldersInPaths } = require('../lib/openspec-reads.js');
 const { tempRoot, fakeIo } = require('./helpers.js');
 
 const PROPOSAL = '# Proposal\n';
@@ -87,18 +86,6 @@ test('--files ignores files under the archive and outside changes/', () => {
     files: 'openspec/changes/archive/2026-01-01-Old/x.md\nopenspec/specs/a.md\n',
   });
   assert.equal(main(['--files', 'f'], io, tempRoot({})), 0);
-});
-
-test('foldersInPaths names each touched change once and never the archive', () => {
-  const folders = foldersInPaths([
-    'openspec/changes/one/proposal.md',
-    'openspec/changes/one/tasks.md',
-    'openspec/changes/two/specs/a/spec.md',
-    'openspec/changes/archive/2026-01-01-old/x.md',
-    'openspec/changes/loose-file.md',
-    'src/app.js',
-  ]);
-  assert.deepEqual(folders, ['one', 'two']);
 });
 
 test('a missing config and bad arguments exit 2', () => {

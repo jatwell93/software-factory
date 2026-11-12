@@ -36,8 +36,7 @@ const { execFileSync } = require('node:child_process');
 const { BASELINE } = require('../lib/baseline.js');
 const { globToRegExp } = require('../lib/glob.js');
 const { ConfigError, loadConfig } = require('../lib/config.js');
-const { ID_PATTERN } = require('../lib/change-id.js');
-const { NoGoFormatError, changeNoGo, changeFolders } = require('../lib/openspec-reads.js');
+const { loadAdapter } = require('../lib/adapters.js');
 
 const USAGE = 'usage: check-no-go.js [--change <id|all>] [--base <ref>] [--files <path|->]';
 const FACTORY_AUTHOR = 'claude[bot]';
@@ -61,12 +60,13 @@ function factoryScope(labels, author, prefix = DEFAULT_LABEL_PREFIX) {
  * pick a narrower list). A folder under changes/ counts even when its name is
  * not a valid change id, so a badly named change never has its list skipped.
  */
-function patternsFor(changeId, root, config = { protected_paths: [] }) {
+function patternsFor(changeId, adapter, config = { protected_paths: [] }) {
+  const active = adapter.listChanges().map((c) => c.id);
   let ids = [];
-  if (changeId === ALL_CHANGES) ids = changeFolders(root);
-  else if (ID_PATTERN.test(changeId)) ids = [changeId];
+  if (changeId === ALL_CHANGES) ids = active;
+  else if (active.includes(changeId)) ids = [changeId];
   const own = config.protected_paths || [];
-  return [...new Set([...BASELINE, ...own, ...ids.flatMap((id) => changeNoGo(id, root))])];
+  return [...new Set([...BASELINE, ...own, ...ids.flatMap((id) => adapter.readAutonomy(id).noGo)])];
 }
 
 /** Paths that match any pattern, each with the first pattern it matched. */
@@ -133,13 +133,13 @@ function main(argv, io = defaultIo, root = process.cwd(), env = process.env) {
   let config;
   try {
     config = loadConfig(root);
-    patterns = patternsFor(opts.change, root, config);
+    patterns = patternsFor(opts.change, loadAdapter(config, { root }), config);
   } catch (err) {
     if (err instanceof ConfigError) {
       io.error(`no_go: ${err.message}`);
       return 2;
     }
-    if (!(err instanceof NoGoFormatError)) throw err;
+    if (!err.userError) throw err;
     io.error(`no_go: ${err.message}; use a block list of "  - path" lines`);
     return 2;
   }
@@ -160,7 +160,6 @@ module.exports = {
   BASELINE,
   factoryScope,
   globToRegExp,
-  parseNoGo: require('../lib/openspec-reads.js').parseNoGo,
   patternsFor,
   findMatches,
   parseArgs,
