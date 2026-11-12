@@ -1,0 +1,74 @@
+name: Factory CI relay (reusable)
+
+# When a CI workflow on a factory PR finishes, ask the factory workflow for a
+# babysit pass by dispatching it with the PR number.
+#
+# Why a relay: a workflow_run job runs with the base repository's write token,
+# and checking out the PR's code there is the "untrusted checkout in a
+# privileged context" pattern CodeQL rejects. This job checks out nothing and
+# runs no PR code; it only reads the PR's author and dispatches. A dispatch made
+# with GITHUB_TOKEN does start a workflow (workflow_dispatch is the exception to
+# the rule that GITHUB_TOKEN events start no runs).
+#
+# The caller (templates/workflows/factory-ci-relay.yml) holds the trigger: a
+# workflow_run list of the project's CI workflows, which cannot read config, so
+# `init` writes it from `ci_workflows` and `doctor` fails when the two differ.
+# Not check_suite: GitHub does not start workflows from check suites that
+# Actions itself created.
+
+on:
+  workflow_call:
+    inputs:
+      factory_workflow:
+        description: 'File name of the project workflow that runs the factory'
+        required: false
+        type: string
+        default: factory.yml
+      guard_workflow:
+        description: 'File name of the project workflow that runs the no-go guard'
+        required: false
+        type: string
+        default: no-go-guard.yml
+
+permissions:
+  actions: write # gh workflow run <factory> and <guard>
+  pull-requests: read # gh pr view (author)
+  statuses: read # the head's factory/no-go-guard status
+
+jobs:
+  relay:
+    name: Relay to the factory
+    if: github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.pull_requests[0].number
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+      PR: ${{ github.event.workflow_run.pull_requests[0].number }}
+      FACTORY_WORKFLOW: ${{ inputs.factory_workflow }}
+      GUARD_WORKFLOW: ${{ inputs.guard_workflow }}
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+    steps:
+      - name: Dispatch a babysit pass for a factory PR
+        run: |
+          author=$(gh pr view "$PR" --repo "$REPO" --json author --jq .author.login)
+          if [ "$author" != "app/claude" ]; then
+            echo "PR #$PR is not a factory PR (author $author); nothing to relay"
+            exit 0
+          fi
+          gh workflow run "$FACTORY_WORKFLOW" --repo "$REPO" -f pr="$PR"
+
+      # pull_request_target does not always fire on a push, and then the
+      # required factory/no-go-guard status never arrives. CI has finished by
+      # now, so a head still without it was missed: run the guard for it.
+      - name: Re-run the no-go guard if the head has no status
+        run: |
+          author=$(gh pr view "$PR" --repo "$REPO" --json author --jq .author.login)
+          [ "$author" = "app/claude" ] || exit 0
+          head=$(gh pr view "$PR" --repo "$REPO" --json headRefOid --jq .headRefOid)
+          seen=$(gh api "repos/$REPO/commits/$head/statuses?per_page=100" \
+            --jq '[.[] | select(.context == "factory/no-go-guard")] | length')
+          if [ "$seen" = 0 ]; then
+            echo "PR #$PR head $head has no factory/no-go-guard status; dispatching the guard"
+            gh workflow run "$GUARD_WORKFLOW" --repo "$REPO" --ref "$DEFAULT_BRANCH" -f pr="$PR"
+          fi
