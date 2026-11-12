@@ -13,7 +13,9 @@ const { tempRoot } = require('./helpers.js');
 
 const WORKFLOWS = path.join(__dirname, '..', '.github', 'workflows');
 const REF = 'a'.repeat(40);
-const REUSABLE = CALLERS;
+// The runner has its own tests (factory-workflow.test.js): it checks out the PR
+// branch and takes a secret, which the checks below forbid for the small workflows.
+const REUSABLE = CALLERS.filter((name) => name !== 'factory.yml');
 const ciConfig = (...names) =>
   loadConfig(
     tempRoot(
@@ -57,8 +59,12 @@ test('a caller grants at least the permissions its reusable workflow declares', 
   const rank = { none: 0, read: 1, write: 2 };
   for (const name of CALLERS) {
     const granted = caller(name).permissions;
-    for (const [scope, level] of Object.entries(readReusable(name).permissions)) {
-      assert.ok(rank[granted[scope]] >= rank[level], `${name}: ${scope}: ${level}`);
+    const workflow = readReusable(name);
+    const asked = [workflow.permissions, ...Object.values(workflow.jobs).map((j) => j.permissions)];
+    for (const permissions of asked.filter(Boolean)) {
+      for (const [scope, level] of Object.entries(permissions)) {
+        assert.ok(rank[granted[scope]] >= rank[level], `${name}: ${scope}: ${level}`);
+      }
     }
   }
 });
@@ -217,6 +223,15 @@ test('each reusable workflow declares exactly the permissions it needs', () => {
       statuses: 'read',
     },
     'check-change-ids.yml': { contents: 'read', 'pull-requests': 'read', statuses: 'write' },
+    'factory.yml': {
+      contents: 'write',
+      'pull-requests': 'write',
+      issues: 'write',
+      'id-token': 'write',
+      actions: 'read',
+      checks: 'read',
+      statuses: 'read',
+    },
   };
   assert.deepEqual(Object.keys(expected).sort(), [...CALLERS].sort());
   for (const [name, permissions] of Object.entries(expected)) {
@@ -225,7 +240,12 @@ test('each reusable workflow declares exactly the permissions it needs', () => {
 });
 
 test('a workflow that runs factory scripts requires the pin, so it cannot run an unpinned copy', () => {
-  for (const name of ['no-go-guard.yml', 'factory-digest.yml', 'check-change-ids.yml']) {
+  for (const name of [
+    'no-go-guard.yml',
+    'factory-digest.yml',
+    'check-change-ids.yml',
+    'factory.yml',
+  ]) {
     const input = readReusable(name).on.workflow_call.inputs.factory_ref;
     assert.equal(input.required, true, name);
     assert.equal(input.type, 'string', name);
