@@ -6,7 +6,13 @@ const os = require('node:os');
 const path = require('node:path');
 
 const { loadConfig } = require('../lib/config.js');
-const { renderHooks, renderPreCommit, renderPrePush, writeHooks } = require('../lib/hooks.js');
+const {
+  foreignHooks,
+  renderHooks,
+  renderPreCommit,
+  renderPrePush,
+  writeHooks,
+} = require('../lib/hooks.js');
 const { main: install } = require('../scripts/install-git-hooks.js');
 const { tempRoot } = require('./helpers.js');
 
@@ -127,7 +133,7 @@ const unset = () => {
 };
 
 /** Fake git and directory listing for the installer. */
-function installDeps({ hooksPath = '', files = [] } = {}) {
+function installDeps({ hooksPath = '', files = [], foreign = [] } = {}) {
   const calls = [];
   const writes = [];
   const answers = {
@@ -138,7 +144,14 @@ function installDeps({ hooksPath = '', files = [] } = {}) {
     calls.push(args);
     return (answers[args.slice(0, 2).join(' ')] || (() => 'true'))();
   };
-  return { calls, writes, git, list: () => files, write: (...a) => writes.push(a) };
+  return {
+    calls,
+    writes,
+    git,
+    list: () => files,
+    foreign: () => foreign,
+    write: (...a) => writes.push(a),
+  };
 }
 
 const setHooksPath = (calls) => calls.some((a) => a[0] === 'config' && a[1] === 'core.hooksPath');
@@ -173,4 +186,34 @@ test('install treats a git-secrets hook like any other hook of the project', () 
   const secrets = installDeps({ files: ['pre-commit', 'commit-msg'] });
   assert.match(install(config, secrets), /already has hooks \(pre-commit, commit-msg\)/);
   assert.ok(!setHooksPath(secrets.calls));
+});
+
+test('hooks the project already keeps in .githooks are never overwritten', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'hooks-'));
+  const dir = path.join(root, '.githooks');
+  fs.mkdirSync(dir);
+  fs.writeFileSync(path.join(dir, 'pre-push'), '#!/bin/sh\necho mine\n');
+  assert.deepEqual(foreignHooks(root), ['pre-push']);
+  assert.throws(() => writeHooks(root, config), /did not write \(pre-push\)/);
+  assert.equal(fs.readFileSync(path.join(dir, 'pre-push'), 'utf8'), '#!/bin/sh\necho mine\n');
+  assert.ok(!fs.existsSync(path.join(dir, 'pre-commit')), 'nothing was written beside it');
+});
+
+test('a rerun replaces the factory hooks it wrote, and finds nothing foreign', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'hooks-'));
+  assert.deepEqual(foreignHooks(root), [], 'no .githooks yet');
+  writeHooks(root, config);
+  assert.deepEqual(foreignHooks(root), []);
+  const trunk = configWith('default_branch: trunk');
+  writeHooks(root, trunk);
+  assert.match(fs.readFileSync(path.join(root, '.githooks', 'pre-commit'), 'utf8'), /trunk/);
+});
+
+test('install leaves a project .githooks alone, even when core.hooksPath already names it', () => {
+  for (const hooksPath of ['', '.githooks']) {
+    const deps = installDeps({ hooksPath, foreign: ['pre-commit'] });
+    assert.match(install(config, deps), /\.githooks already has hooks \(pre-commit\)/);
+    assert.equal(deps.writes.length, 0);
+    assert.ok(!setHooksPath(deps.calls));
+  }
 });

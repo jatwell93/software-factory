@@ -15,11 +15,12 @@
 const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 const { loadConfig } = require('../lib/config.js');
-const { HOOKS_DIR, writeHooks } = require('../lib/hooks.js');
+const { HOOKS_DIR, foreignHooks, writeHooks } = require('../lib/hooks.js');
 
 const defaultDeps = {
   git: (args) => execFileSync('git', args, { encoding: 'utf8', stdio: 'pipe' }).trim(),
   list: (dir) => (fs.existsSync(dir) ? fs.readdirSync(dir) : []),
+  foreign: (root) => foreignHooks(root),
 };
 
 /** The configured core.hooksPath, or ''. */
@@ -43,7 +44,7 @@ function existingHooks(deps) {
 
 /**
  * @param {object} config A loaded factory.config.yml.
- * @param {{root?: string, git?: Function, list?: Function, write?: Function}} [io]
+ * @param {{root?: string, git?: Function, list?: Function, foreign?: Function, write?: Function}} [io]
  * @returns {string} What happened, for the installer's output.
  */
 function main(config, { root = process.cwd(), write = writeHooks, ...deps } = {}) {
@@ -53,7 +54,10 @@ function main(config, { root = process.cwd(), write = writeHooks, ...deps } = {}
   } catch {
     return 'not a git checkout: hooks not installed';
   }
-  const existing = existingHooks(d);
+  const foreign = d.foreign(root);
+  const existing = foreign.length
+    ? `${HOOKS_DIR} already has hooks (${foreign.join(', ')})`
+    : existingHooks(d);
   if (existing) {
     return `git hooks not installed: ${existing}. Call ${HOOKS_DIR}/pre-commit and ${HOOKS_DIR}/pre-push from your own hooks.`;
   }
