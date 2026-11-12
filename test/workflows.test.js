@@ -241,7 +241,10 @@ test('a pull_request_target workflow reports its result as a commit status on th
   ]) {
     const text = fs.readFileSync(path.join(WORKFLOWS, name), 'utf8');
     assert.ok(text.includes('repos/$REPO/statuses/$HEAD_SHA" -f state=success'), name);
-    assert.ok(text.includes(`context=${context}`), name);
+    // Success and failure must post the same context, or a required one never clears.
+    const posted = text.split('\n').filter((l) => l.includes('-f context='));
+    assert.ok(posted.length >= 2, name);
+    for (const line of posted) assert.ok(line.includes(`context=${context} `), `${name}: ${line}`);
     assert.match(text, /-f state=failure/, name);
     assert.equal(
       readReusable(name).jobs[Object.keys(readReusable(name).jobs)[0]].env.HEAD_SHA,
