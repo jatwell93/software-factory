@@ -193,6 +193,39 @@ function activityTimes(pr, head, checkRows) {
   ];
 }
 
+/** The earliest of some timestamps, or null. */
+function earliestTime(times) {
+  const valid = times
+    .filter(Boolean)
+    .map((t) => Date.parse(t))
+    .filter(Number.isFinite);
+  return valid.length ? new Date(Math.min(...valid)).toISOString() : null;
+}
+
+/**
+ * Every login that has posted on the PR: in a thread (resolved or not), a review
+ * or a comment. A bot that resolves its own threads still counts as having posted.
+ */
+function postersOf(pr) {
+  const logins = [
+    ...nodes(pr.reviewThreads).flatMap((t) => nodes(t.comments).map(login)),
+    ...nodes(pr.reviews).map(login),
+    ...nodes(pr.comments).map(login),
+  ];
+  return [...new Set(logins)].sort();
+}
+
+/**
+ * When the head was pushed, as well as the report can tell: the later of the head
+ * commit's date and the first check's start. A commit can be dated long before
+ * its push (a rebase, a cherry-pick), but the checks of the head start right
+ * after the push.
+ */
+function lastPushAt(head, checkRows) {
+  const firstCheck = earliestTime((checkRows || []).map((c) => c.startedAt));
+  return latestTime([head.committedDate, firstCheck]);
+}
+
 /** Why the PR is not settled yet; empty when it is. */
 function blockers({ checks, threadsTruncated, quietUntil, now }) {
   const reasons = [];
@@ -236,6 +269,8 @@ function summarize(
     branch: pr.headRefName,
     head: head.oid,
     headCommittedAt: head.committedDate || null,
+    lastPushAt: lastPushAt(head, checkRows),
+    posters: postersOf(pr),
     checks,
     settled: waitingOn.length === 0,
     waitingOn,

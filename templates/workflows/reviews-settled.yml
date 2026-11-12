@@ -1,0 +1,40 @@
+name: Reviews settled
+
+# Written by software-factory (init). Calls the factory's reusable workflow at a
+# pinned ref; change the pin with `upgrade`, not by hand. Publishes the status
+# `factory/reviews-settled`; require it in the default branch's ruleset to stop a
+# merge before the review bots have posted.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  pull_request_review:
+    types: [submitted]
+  pull_request_review_comment:
+    types: [created]
+  # Ends a quiet window or a bot timeout that no event announces, for every open
+  # factory PR.
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: 'PR number to recompute the status for (empty: every open factory PR)'
+        required: false
+
+permissions:
+  contents: read
+  pull-requests: read
+  checks: read
+  statuses: write
+
+concurrency:
+  group: reviews-settled-${{ github.event.pull_request.number || inputs.pr || 'all' }}
+  cancel-in-progress: true
+
+jobs:
+  settle:
+    uses: jatwell93/software-factory/.github/workflows/reviews-settled.yml@__FACTORY_REF__
+    with:
+      factory_ref: __FACTORY_REF__
+      pr: ${{ inputs.pr }}
