@@ -1,0 +1,414 @@
+name: Factory (reusable)
+
+# Runs the changes of a spec framework unattended.
+#
+#   workflow_dispatch(change_id)          -> run-spec: one task, one PR
+#   factory PR merged                      -> run-spec: the next task
+#   review, review comment, or CI finished -> babysit-pr: one-shot pass
+#     on a factory PR (CI runs arrive as a
+#     dispatch with `pr`, from the CI relay)
+#   owner removes needs-human from the     -> run-spec: the held task
+#     change's tracking issue
+#   owner adds factory-ready to the        -> run-spec: the first task
+#     change's tracking issue
+#   any task route whose next task is      -> escalate job, no Claude run
+#     marked (owner)
+#   hourly schedule                        -> the one retry of a failed run:
+#                                             babysit-pr if the change has an open
+#                                             factory PR, else run-spec; then the
+#                                             sweep of per-change PRs
+#
+# A change with `pr: per-change` in its Autonomy block keeps every task on one
+# PR. Each event on that PR advances it one step: a babysit pass, the next task
+# on the same branch, an owner task's escalation, or marking it ready (the route
+# job does that, no Claude run). Its merge starts nothing. The sweep, run
+# hourly, dispatches a run for any per-change PR that has a step to take but no
+# event to start it.
+#
+# No Claude run starts while the tracking issue has needs-human or factory-retry.
+# The report job labels a failed run's issue factory-retry; a failed retry
+# escalates instead.
+#
+# The `route` job decides which, if any, and skips events with nothing to do
+# (Actions checks still running, nothing actionable, PR parked with needs-human)
+# before a Claude run starts. Only PRs authored by the Claude GitHub App AND
+# labelled <prefix><id> count.
+#
+# The project calls this from templates/workflows/factory.yml, which holds the
+# triggers. The factory's code comes from the pinned `factory_ref`. Every
+# setting (gates, caps, bots, denied commands, Node and install) is read ONCE, by
+# the route job, from the DEFAULT BRANCH's factory.config.yml, and the other jobs
+# take it from the route job's outputs: a PR branch can never change the
+# settings its own run uses.
+#
+# Why it cannot reach production:
+#   * Its only secret is CLAUDE_CODE_OAUTH_TOKEN. No other credential is passed
+#     to it (test/factory-workflow.test.js fails if one is added).
+#   * It never merges. The default branch's ruleset requires an approving review
+#     and the Claude GitHub App, which authors factory PRs, cannot approve its own
+#     PR. The deny-list also blocks gh pr merge, gh pr review and gh api.
+#   * Protected paths (check-no-go) are checked before every push and again by
+#     the no-go-guard workflow, which runs the default branch's config.
+#   * The Claude GitHub App has no Workflows write permission, so a factory PR
+#     cannot change the caller workflow, which review events on its PR run from.
+#   * The factory's own code runs from a checkout outside the working tree, so
+#     the agent has no copy of it to edit.
+#
+# The action pushes as the Claude GitHub App, so CI runs on factory PRs (a push
+# made with the default GITHUB_TOKEN would not trigger other workflows).
+
+on:
+  workflow_call:
+    inputs:
+      factory_ref:
+        description: 'The commit SHA or v* tag of software-factory this workflow was called at'
+        required: true
+        type: string
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN:
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write # the action's OIDC login to the Claude GitHub App
+  actions: read # gh run view --log-failed
+  checks: read # gh pr checks (pr-feedback.js)
+  statuses: read # commit statuses such as factory/no-go-guard
+
+jobs:
+  route:
+    name: Route the event
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      mode: ${{ steps.route.outputs.mode }}
+      change_id: ${{ steps.route.outputs.change_id }}
+      pr: ${{ steps.route.outputs.pr }}
+      ref: ${{ steps.route.outputs.ref }}
+      task: ${{ steps.route.outputs.task }}
+      retry: ${{ steps.route.outputs.retry }}
+      per_change: ${{ steps.route.outputs.per_change }}
+      node_version: ${{ steps.env.outputs.node_version }}
+      install: ${{ steps.env.outputs.install }}
+      default_branch: ${{ steps.env.outputs.default_branch }}
+      rules: ${{ steps.env.outputs.rules }}
+      allowed_bots: ${{ steps.env.outputs.allowed_bots }}
+      step_timeout: ${{ steps.env.outputs.step_timeout }}
+      job_timeout: ${{ steps.env.outputs.job_timeout }}
+      claude_args: ${{ steps.env.outputs.claude_args }}
+    steps:
+      # Always the default branch, never the PR: review events default to the
+      # PR's merge ref, and a factory PR must not be able to rewrite its own router.
+      - name: Checkout the default branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Checkout the factory at the pinned ref
+        uses: actions/checkout@v7
+        with:
+          repository: jatwell93/software-factory
+          ref: ${{ inputs.factory_ref }}
+          path: .software-factory
+          persist-credentials: false
+
+      - name: Install the factory's dependencies
+        run: npm ci --omit=dev --prefix .software-factory
+
+      - name: Read the settings from factory.config.yml
+        id: env
+        run: node .software-factory/scripts/factory-env.js --run >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ steps.env.outputs.node_version }}
+
+      - name: Decide what this event needs
+        id: route
+        # bash, not the default `bash -e`: adds pipefail, so a crash in the
+        # router fails the step instead of being hidden by tee.
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node .software-factory/scripts/factory-route.js | tee -a "$GITHUB_OUTPUT"
+
+  # Its own job, so a failed sweep never fails the route job: that would skip a
+  # retry run whose label the router already swapped to factory-retrying. After
+  # the route job, so the sweep sees that label and leaves the change to the retry.
+  sweep:
+    name: Sweep the per-change PRs
+    needs: route
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # actions: write for `gh workflow run`; no Claude run happens in this job.
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
+      actions: write
+      checks: read
+      statuses: read
+    steps:
+      # The default branch's copy, like the route job: no Claude run and no PR code here.
+      - name: Checkout the default branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.route.outputs.default_branch }}
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ needs.route.outputs.node_version }}
+
+      - name: Checkout the factory at the pinned ref
+        uses: actions/checkout@v7
+        with:
+          repository: jatwell93/software-factory
+          ref: ${{ inputs.factory_ref }}
+          path: .software-factory
+          persist-credentials: false
+
+      - name: Install the factory's dependencies
+        run: npm ci --omit=dev --prefix .software-factory
+
+      - name: Dispatch a run for each per-change PR with a step to take
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node .software-factory/scripts/factory-sweep.js
+
+  run:
+    name: Run one task, one archive or one babysit pass
+    needs: route
+    if: needs.route.outputs.mode == 'task' || needs.route.outputs.mode == 'archive' || needs.route.outputs.mode == 'babysit'
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ fromJSON(needs.route.outputs.job_timeout) }}
+    # New tasks and archive runs queue per change and babysit passes per PR; every run on a
+    # per-change PR queues per change. A running job is never cancelled; GitHub
+    # keeps only the newest queued one, which sees the latest state anyway.
+    # run-spec exits if a per-task factory PR is still open.
+    concurrency:
+      group: ${{ (needs.route.outputs.mode == 'task' || needs.route.outputs.mode == 'archive' || needs.route.outputs.per_change == 'true') && format('factory-{0}', needs.route.outputs.change_id) || format('factory-babysit-{0}', needs.route.outputs.pr) }}
+      cancel-in-progress: false
+    env:
+      DEFAULT_BRANCH: ${{ needs.route.outputs.default_branch }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          # The PR branch for a babysit pass; the default branch for a new task.
+          ref: ${{ needs.route.outputs.ref }}
+          fetch-depth: 0
+
+      # A task or archive run on a per-change PR starts from the PR branch. Merge the
+      # default branch into it first, unless that brings in a workflow change: the
+      # Claude GitHub App has no Workflows permission, so GitHub would reject the
+      # push. Before the rules step below, whose skip-worktree files a merge cannot update.
+      - name: Merge the default branch into a per-change PR branch
+        id: base
+        if: (needs.route.outputs.mode == 'task' || needs.route.outputs.mode == 'archive') && needs.route.outputs.pr != ''
+        shell: bash
+        run: |
+          git fetch --quiet origin "$DEFAULT_BRANCH"
+          if git diff --name-only "HEAD...origin/$DEFAULT_BRANCH" | grep -q '^[.]github/'; then
+            echo "note=the default branch changed .github since this branch; the task works on the older base, so say so in the PR body" >> "$GITHUB_OUTPUT"
+          elif ! git -c user.name='claude[bot]' -c user.email='209825114+claude[bot]@users.noreply.github.com' merge --no-edit "origin/$DEFAULT_BRANCH"; then
+            git merge --abort
+            echo "note=merging the default branch conflicts; the task works on the older base, so say so in the PR body" >> "$GITHUB_OUTPUT"
+          fi
+
+      # A babysit pass works on the PR branch, but follows the default branch's
+      # skills, rules and config: a factory PR that edited them (which no-go-guard
+      # blocks from merging) must not steer its own review passes before the merge.
+      # The restored files must never reach a commit: git checkout stages them,
+      # so unstage them and hide them from `git add` (skip-worktree for tracked
+      # files, .git/info/exclude for files only the default branch has). Otherwise
+      # a pass on a branch behind the default branch would commit its newer rules,
+      # and check-no-go would park the PR for a protected-path edit it never made.
+      - name: Use the default branch's copy of the project's rules
+        shell: bash
+        env:
+          RULES: ${{ needs.route.outputs.rules }}
+        run: |
+          git fetch --quiet origin "$DEFAULT_BRANCH"
+          # A file the PR branch added under a rule has no default-branch copy to
+          # restore, so it would stay and steer the pass: remove it, hidden from
+          # `git add` the same way, so its removal never reaches a commit.
+          # shellcheck disable=SC2086
+          comm -z -23 \
+            <(git ls-files -z -- $RULES | sort -z) \
+            <(git ls-tree -r -z --name-only "origin/$DEFAULT_BRANCH" -- $RULES | sort -z) \
+            > "$RUNNER_TEMP/pr-only-rules.list"
+          xargs -0 -r git update-index --skip-worktree < "$RUNNER_TEMP/pr-only-rules.list"
+          xargs -0 -r rm -f -- < "$RUNNER_TEMP/pr-only-rules.list"
+          # Only the rules the default branch has: git checkout fails on a missing path.
+          # shellcheck disable=SC2086
+          mapfile -t rules < <(git ls-tree --name-only "origin/$DEFAULT_BRANCH" -- $RULES)
+          if [ "${#rules[@]}" -gt 0 ]; then
+            git checkout "origin/$DEFAULT_BRANCH" -- "${rules[@]}"
+            git reset --quiet -- "${rules[@]}"
+            git ls-files -z -- "${rules[@]}" | xargs -0 -r git update-index --skip-worktree
+            git ls-files --others --exclude-standard -- "${rules[@]}" | sed 's#^#/#' >> .git/info/exclude
+          fi
+          git status --short
+
+      # The factory's code, outside the working tree: the agent can neither edit it
+      # nor commit it. The skills reach it through $FACTORY_DIR.
+      - name: Checkout the factory at the pinned ref
+        uses: actions/checkout@v7
+        with:
+          repository: jatwell93/software-factory
+          ref: ${{ inputs.factory_ref }}
+          path: .software-factory
+          persist-credentials: false
+
+      - name: Install the factory's dependencies and move it out of the working tree
+        shell: bash
+        run: |
+          npm ci --omit=dev --prefix .software-factory
+          mv .software-factory "$RUNNER_TEMP/software-factory"
+          echo "FACTORY_DIR=$RUNNER_TEMP/software-factory" >> "$GITHUB_ENV"
+
+      # A babysit pass on a per-change PR may find the change archived on the
+      # branch already. The config is the default branch's, restored above.
+      - name: Check the change exists
+        env:
+          CHANGE_ID: ${{ needs.route.outputs.change_id }}
+          MODE: ${{ needs.route.outputs.mode }}
+        run: node "$FACTORY_DIR/scripts/factory-check-change.js" "$CHANGE_ID" "$MODE"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ needs.route.outputs.node_version }}
+
+      - name: Install the project's dependencies
+        shell: bash
+        env:
+          INSTALL: ${{ needs.route.outputs.install }}
+        run: bash -c "$INSTALL"
+
+      - name: Run Claude
+        uses: anthropics/claude-code-action@v1
+        # Below the job's limit: a step timeout fails the job, so the report job
+        # records it for a retry. A job timeout can end the run `cancelled`.
+        timeout-minutes: ${{ fromJSON(needs.route.outputs.step_timeout) }}
+        # Ride out 429/529 capacity errors instead of failing after the default
+        # retries, but bound one request's wait (10 min) so an outage ends the step
+        # long before the step timeout and the one factory retry takes over.
+        # Unbounded, the watchdog waits as long as the API keeps failing.
+        env:
+          CLAUDE_CODE_RETRY_WATCHDOG: '1'
+          CLAUDE_CODE_RETRY_WATCHDOG_MAX_WAIT_MS: '600000'
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Review events come from these bots; the action refuses other bot actors.
+          allowed_bots: ${{ needs.route.outputs.allowed_bots }}
+          # change_id and pr come from the route job, which accepts only a plain
+          # change id and a PR number.
+          prompt: |
+            ${{ needs.route.outputs.mode == 'archive' && format('Use the run-spec skill (.claude/skills/run-spec/SKILL.md) on the change `{0}`. Every task is done: follow its "Archive a finished change" section.', needs.route.outputs.change_id) || needs.route.outputs.mode == 'task' && format('Use the run-spec skill (.claude/skills/run-spec/SKILL.md) on the change `{0}`.', needs.route.outputs.change_id) || format('Use the babysit-pr skill (.claude/skills/babysit-pr/SKILL.md) in one-shot mode on PR #{0}, a factory PR for the change `{1}`.', needs.route.outputs.pr, needs.route.outputs.change_id) }}
+            ${{ needs.route.outputs.per_change == 'true' && needs.route.outputs.pr == '' && 'The change runs as one PR (`pr: per-change`): this is its first task, so open that PR as the skill says for a first task.' || '' }}
+            ${{ needs.route.outputs.per_change == 'true' && needs.route.outputs.pr != '' && format('The change runs as one PR (`pr: per-change`): this run is on PR #{0}, branch `{1}`, and its PR rules apply.', needs.route.outputs.pr, needs.route.outputs.ref) || '' }} ${{ needs.route.outputs.mode == 'task' && needs.route.outputs.per_change == 'true' && needs.route.outputs.pr != '' && format('Do task {0}. {1}', needs.route.outputs.task, steps.base.outputs.note) || '' }}
+            The factory's scripts are in `$FACTORY_DIR/scripts` (an environment variable, outside the working tree).
+            You are running in GitHub Actions with no human watching. Follow the skill exactly; escalate instead of asking.
+          # The caps and both tool lists come from factory.config.yml, built by
+          # factory-env.js. No comments inside the block: it is the raw argument string.
+          claude_args: ${{ needs.route.outputs.claude_args }}
+
+  escalate:
+    name: Ask the owner to do an owner task
+    needs: route
+    if: needs.route.outputs.mode == 'escalate'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Same group as the change's task runs, so it never races one.
+    concurrency:
+      group: ${{ format('factory-{0}', needs.route.outputs.change_id) }}
+      cancel-in-progress: false
+    steps:
+      # The default branch's copy, like the route job: no Claude run and no PR code here.
+      - name: Checkout the default branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.route.outputs.default_branch }}
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ needs.route.outputs.node_version }}
+
+      - name: Checkout the factory at the pinned ref
+        uses: actions/checkout@v7
+        with:
+          repository: jatwell93/software-factory
+          ref: ${{ inputs.factory_ref }}
+          path: .software-factory
+          persist-credentials: false
+
+      - name: Install the factory's dependencies
+        run: npm ci --omit=dev --prefix .software-factory
+
+      - name: Label the tracking issue and comment the task
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHANGE_ID: ${{ needs.route.outputs.change_id }}
+          TASK: ${{ needs.route.outputs.task }}
+          # The PR branch, for a per-change PR: its task list has the task.
+          REF: ${{ needs.route.outputs.per_change == 'true' && needs.route.outputs.ref || '' }}
+        run: node .software-factory/scripts/factory-escalate.js "$CHANGE_ID" "$TASK" ${REF:+"$REF"}
+
+  report:
+    name: Record the run for a retry
+    needs: [route, run]
+    # A cancelled or skipped run records nothing.
+    if: always() && (needs.run.result == 'failure' || needs.run.result == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # The default branch's copy, like the route job: no Claude run and no PR code here.
+      - name: Checkout the default branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.route.outputs.default_branch }}
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ needs.route.outputs.node_version }}
+
+      - name: Checkout the factory at the pinned ref
+        uses: actions/checkout@v7
+        with:
+          repository: jatwell93/software-factory
+          ref: ${{ inputs.factory_ref }}
+          path: .software-factory
+          persist-credentials: false
+
+      - name: Install the factory's dependencies
+        run: npm ci --omit=dev --prefix .software-factory
+
+      - name: Label the tracking issue for a retry, or clear it
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHANGE_ID: ${{ needs.route.outputs.change_id }}
+          RESULT: ${{ needs.run.result }}
+          # Set only when this run is the scheduled retry (the route's `retry`).
+          RETRY: ${{ needs.route.outputs.retry }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ "$RESULT" = failure ]; then
+            node .software-factory/scripts/factory-retry.js fail "$CHANGE_ID" "$RUN_URL"
+          elif [ -n "$RETRY" ]; then
+            # Only the retry itself ends factory-retrying; a parallel success
+            # must not reset the one-retry budget.
+            node .software-factory/scripts/factory-retry.js ok "$CHANGE_ID"
+          fi

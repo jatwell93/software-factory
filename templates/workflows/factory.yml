@@ -1,0 +1,54 @@
+name: Factory
+
+# Written by software-factory (init). Calls the factory's reusable workflow at a
+# pinned ref; change the pin with `upgrade`, not by hand. The triggers live here
+# because a reusable workflow cannot carry its own.
+#
+# The secret CLAUDE_CODE_OAUTH_TOKEN must exist in the repository's secrets. It is
+# the only secret this workflow gets.
+
+on:
+  workflow_dispatch:
+    inputs:
+      change_id:
+        description: Change id to start a task on
+        required: false
+        type: string
+      pr:
+        # Set by the CI relay when a CI run on a factory PR finishes.
+        description: Factory PR number for a babysit pass
+        required: false
+        type: string
+  pull_request:
+    types: [closed]
+  pull_request_review:
+    types: [submitted]
+  pull_request_review_comment:
+    types: [created]
+  # The owner removing needs-human from a tracking issue resumes the change; the
+  # owner adding factory-ready starts it. The router ignores either unless the
+  # owner made it.
+  issues:
+    types: [labeled, unlabeled]
+  # The retry check: routes one failed run whose retry label is over an hour old.
+  schedule:
+    - cron: '23 * * * *'
+
+# The most any job of the reusable workflow may have. The reusable workflow
+# narrows it per job (only its sweep job gets actions: write).
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+  actions: write
+  checks: read
+  statuses: read
+
+jobs:
+  factory:
+    uses: jatwell93/software-factory/.github/workflows/factory.yml@__FACTORY_REF__
+    with:
+      factory_ref: __FACTORY_REF__
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
