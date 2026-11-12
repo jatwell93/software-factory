@@ -237,6 +237,16 @@ jobs:
           RULES: ${{ needs.route.outputs.rules }}
         run: |
           git fetch --quiet origin "$DEFAULT_BRANCH"
+          # A file the PR branch added under a rule has no default-branch copy to
+          # restore, so it would stay and steer the pass: remove it, hidden from
+          # `git add` the same way, so its removal never reaches a commit.
+          # shellcheck disable=SC2086
+          comm -z -23 \
+            <(git ls-files -z -- $RULES | sort -z) \
+            <(git ls-tree -r -z --name-only "origin/$DEFAULT_BRANCH" -- $RULES | sort -z) \
+            > "$RUNNER_TEMP/pr-only-rules.list"
+          xargs -0 -r git update-index --skip-worktree < "$RUNNER_TEMP/pr-only-rules.list"
+          xargs -0 -r rm -f -- < "$RUNNER_TEMP/pr-only-rules.list"
           # Only the rules the default branch has: git checkout fails on a missing path.
           # shellcheck disable=SC2086
           mapfile -t rules < <(git ls-tree --name-only "origin/$DEFAULT_BRANCH" -- $RULES)

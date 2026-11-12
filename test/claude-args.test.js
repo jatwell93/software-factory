@@ -93,3 +93,28 @@ test("review bots get the [bot] suffix, and the factory's own actors are always 
     'no duplicate',
   );
 });
+
+test('prefixesOf gives a prefix to every line of a multi-line gate, and to each side of a pipe', () => {
+  assert.deepEqual(prefixesOf('npm run lint\nnpm test\r\nmake check'), [
+    'npm run',
+    'npm test',
+    'make check',
+  ]);
+  assert.deepEqual(prefixesOf('npm run lint | tee out.txt'), ['npm run', 'tee out.txt']);
+  assert.deepEqual(prefixesOf('npm run build & npm test'), ['npm run', 'npm test']);
+  assert.deepEqual(prefixesOf('npm run build \\n  --workspaces\nnpm test'), [
+    'npm run',
+    'npm test',
+  ]);
+  assert.deepEqual(prefixesOf('# lint first\nnpm run lint\n\n  # then test\nnpm test'), [
+    'npm run',
+    'npm test',
+  ]);
+});
+
+test('a multi-line gate allows the program on every line', () => {
+  const config = configWith();
+  config.gates = [{ run: 'npm run lint\ncargo test\n' }];
+  const tools = allowedTools(config);
+  assert.ok(tools.includes('Bash(npm run:*)') && tools.includes('Bash(cargo test:*)'));
+});
