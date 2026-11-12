@@ -10,7 +10,7 @@ name: Factory CI relay
 on:
   workflow_run:
     workflows:
-__CI_WORKFLOWS__
+      - __CI_WORKFLOWS__
     types: [completed]
 
 permissions:
