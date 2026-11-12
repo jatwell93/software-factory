@@ -64,11 +64,15 @@ test('the denied tools are the fixed ones plus forbidden_commands, and never few
     'Bash(gh pr review:*)',
     'Bash(gh api:*)',
     'Bash(curl:*)',
+    'Bash(git push --force:*)',
+    'Bash(git push --force-with-lease:*)',
+    'Bash(git push --force-if-includes:*)',
+    'Bash(git push -f:*)',
   ]) {
     assert.ok(denied.includes(fixed), fixed);
   }
   assert.ok(denied.includes('Bash(npm run test:prod:*)') && denied.includes('Bash(doppler:*)'));
-  assert.equal(deniedTools(configWith()).length, 7);
+  assert.equal(deniedTools(configWith()).length, 9);
 });
 
 test('claudeArgs carries the caps and both tool lists, one option per line', () => {
