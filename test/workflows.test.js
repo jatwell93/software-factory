@@ -216,7 +216,7 @@ test('each reusable workflow declares exactly the permissions it needs', () => {
       checks: 'read',
       statuses: 'read',
     },
-    'check-change-ids.yml': { contents: 'read', 'pull-requests': 'read' },
+    'check-change-ids.yml': { contents: 'read', 'pull-requests': 'read', statuses: 'write' },
   };
   assert.deepEqual(Object.keys(expected).sort(), [...CALLERS].sort());
   for (const [name, permissions] of Object.entries(expected)) {
@@ -229,5 +229,25 @@ test('a workflow that runs factory scripts requires the pin, so it cannot run an
     const input = readReusable(name).on.workflow_call.inputs.factory_ref;
     assert.equal(input.required, true, name);
     assert.equal(input.type, 'string', name);
+  }
+});
+
+test('a pull_request_target workflow reports its result as a commit status on the PR head', () => {
+  // A pull_request_target job's own check run attaches to the base commit, where
+  // a required check is never looked up, so the PR would wait forever.
+  for (const [name, context] of [
+    ['no-go-guard.yml', 'factory/no-go-guard'],
+    ['check-change-ids.yml', 'factory/change-ids'],
+  ]) {
+    const text = fs.readFileSync(path.join(WORKFLOWS, name), 'utf8');
+    assert.ok(text.includes('repos/$REPO/statuses/$HEAD_SHA" -f state=success'), name);
+    assert.ok(text.includes(`context=${context}`), name);
+    assert.match(text, /-f state=failure/, name);
+    assert.equal(
+      readReusable(name).jobs[Object.keys(readReusable(name).jobs)[0]].env.HEAD_SHA,
+      '${{ github.event.pull_request.head.sha }}',
+      name,
+    );
+    assert.equal(readReusable(name).permissions.statuses, 'write', name);
   }
 });

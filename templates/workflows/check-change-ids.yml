@@ -1,9 +1,9 @@
 name: Change ids
 
 # Written by software-factory (init). Calls the factory's reusable workflow at a
-# pinned ref; change the pin with `upgrade`, not by hand. Require the check
-# `change-ids / Change ids` in the default branch's ruleset (a reusable
-# workflow's check is named <caller job> / <called job>).
+# pinned ref; change the pin with `upgrade`, not by hand. Require the status
+# `factory/change-ids` in the default branch's ruleset: the workflow posts it on
+# the PR head, because a pull_request_target check run attaches to the base commit.
 
 on:
   pull_request_target:
@@ -12,6 +12,7 @@ on:
 permissions:
   contents: read
   pull-requests: read
+  statuses: write
 
 concurrency:
   group: change-ids-${{ github.event.pull_request.number }}

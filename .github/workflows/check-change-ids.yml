@@ -8,8 +8,13 @@ name: Change ids (reusable)
 # The caller (templates/workflows/check-change-ids.yml) triggers on
 # pull_request_target, so the default branch's config and the pinned factory code
 # judge the PR, never its own copy. The PR's code is never checked out: the check
-# reads only the file list from the API. It is a plain required check, not a
-# status: every PR gets the job, and one that touches no change folder passes.
+# reads only the file list from the API.
+#
+# The result is posted as the commit status `factory/change-ids` on the PR head,
+# because a pull_request_target job's own check run is attached to the base
+# commit, and a required check is looked up on the head. Require
+# `factory/change-ids` in the default branch's ruleset. Every PR gets a status:
+# one that touches no change folder passes.
 
 on:
   workflow_call:
@@ -22,6 +27,7 @@ on:
 permissions:
   contents: read
   pull-requests: read
+  statuses: write
 
 jobs:
   change-ids:
@@ -32,6 +38,7 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       REPO: ${{ github.repository }}
       PR_NUMBER: ${{ github.event.pull_request.number }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
     steps:
       - name: Checkout the default branch (never the PR head)
         uses: actions/checkout@v7
@@ -54,4 +61,11 @@ jobs:
         run: |
           gh api "repos/$REPO/pulls/$PR_NUMBER/files" --paginate \
             --jq '.[] | .filename, (.previous_filename // empty)' > "$RUNNER_TEMP/pr-files.txt"
-          node .software-factory/scripts/check-change-ids.js --files "$RUNNER_TEMP/pr-files.txt"
+          if node .software-factory/scripts/check-change-ids.js --files "$RUNNER_TEMP/pr-files.txt"; then
+            gh api "repos/$REPO/statuses/$HEAD_SHA" -f state=success \
+              -f context=factory/change-ids -f description="Every change id is valid"
+          else
+            gh api "repos/$REPO/statuses/$HEAD_SHA" -f state=failure \
+              -f context=factory/change-ids -f description="A change folder has an id the factory cannot run"
+            exit 1
+          fi
