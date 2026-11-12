@@ -1,0 +1,71 @@
+name: Change ids (reusable)
+
+# Fails a PR that adds a change folder whose id the factory cannot run: not
+# lowercase letters, digits and hyphens, or longer than the project's limit.
+# Without this check a bad id is first caught when a run starts, after the plan
+# PR merged.
+#
+# The caller (templates/workflows/check-change-ids.yml) triggers on
+# pull_request_target, so the default branch's config and the pinned factory code
+# judge the PR, never its own copy. The PR's code is never checked out: the check
+# reads only the file list from the API.
+#
+# The result is posted as the commit status `factory/change-ids` on the PR head,
+# because a pull_request_target job's own check run is attached to the base
+# commit, and a required check is looked up on the head. Require
+# `factory/change-ids` in the default branch's ruleset. Every PR gets a status:
+# one that touches no change folder passes.
+
+on:
+  workflow_call:
+    inputs:
+      factory_ref:
+        description: 'The commit SHA or v* tag of software-factory this workflow was called at'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: read
+  statuses: write
+
+jobs:
+  change-ids:
+    name: Change ids
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Checkout the default branch (never the PR head)
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Checkout the factory at the pinned ref
+        uses: actions/checkout@v7
+        with:
+          repository: jatwell93/software-factory
+          ref: ${{ inputs.factory_ref }}
+          path: .software-factory
+          persist-credentials: false
+
+      - name: Install the factory's dependencies
+        run: npm ci --omit=dev --prefix .software-factory
+
+      - name: Check the ids of the change folders the PR touches
+        run: |
+          gh api "repos/$REPO/pulls/$PR_NUMBER/files" --paginate \
+            --jq '.[] | .filename, (.previous_filename // empty)' > "$RUNNER_TEMP/pr-files.txt"
+          if node .software-factory/scripts/check-change-ids.js --files "$RUNNER_TEMP/pr-files.txt"; then
+            gh api "repos/$REPO/statuses/$HEAD_SHA" -f state=success \
+              -f context=factory/change-ids -f description="Every change id is valid"
+          else
+            gh api "repos/$REPO/statuses/$HEAD_SHA" -f state=failure \
+              -f context=factory/change-ids -f description="A change folder has an id the factory cannot run"
+            exit 1
+          fi

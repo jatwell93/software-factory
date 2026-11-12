@@ -1,0 +1,23 @@
+name: Factory CI relay
+
+# Written by software-factory (init). Calls the factory's reusable workflow at a
+# pinned ref; change the pin with `upgrade`, not by hand.
+#
+# The trigger lists the project's CI workflows, copied from `ci_workflows` in
+# factory.config.yml: a workflow_run trigger cannot read config, so `doctor`
+# fails when the two lists differ. Rerun `init` after changing `ci_workflows`.
+
+on:
+  workflow_run:
+    workflows:
+      - __CI_WORKFLOWS__
+    types: [completed]
+
+permissions:
+  actions: write
+  pull-requests: read
+  statuses: read
+
+jobs:
+  relay:
+    uses: jatwell93/software-factory/.github/workflows/factory-ci-relay.yml@__FACTORY_REF__

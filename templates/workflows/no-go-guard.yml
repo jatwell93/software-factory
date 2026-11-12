@@ -1,0 +1,31 @@
+name: No-go guard
+
+# Written by software-factory (init). Calls the factory's reusable workflow at a
+# pinned ref; change the pin with `upgrade`, not by hand. See the reusable
+# workflow for why this triggers on pull_request_target and what it never checks
+# out. Require the status `factory/no-go-guard` in the default branch's ruleset.
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: 'PR number whose head has no factory/no-go-guard status'
+        required: true
+
+permissions:
+  contents: read
+  pull-requests: read
+  statuses: write
+
+concurrency:
+  group: no-go-guard-${{ github.event.pull_request.number || inputs.pr }}
+  cancel-in-progress: true
+
+jobs:
+  guard:
+    uses: jatwell93/software-factory/.github/workflows/no-go-guard.yml@__FACTORY_REF__
+    with:
+      factory_ref: __FACTORY_REF__
+      pr: ${{ inputs.pr }}

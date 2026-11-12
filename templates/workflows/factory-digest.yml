@@ -1,0 +1,28 @@
+name: Factory digest
+
+# Written by software-factory (init). Calls the factory's reusable workflow at a
+# pinned ref; change the pin with `upgrade`, not by hand.
+
+on:
+  schedule:
+    # Once a day, before the working day. Edit the hour for your time zone.
+    - cron: '0 21 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+  actions: read
+  checks: read
+  statuses: read
+
+concurrency:
+  group: factory-digest
+  cancel-in-progress: false
+
+jobs:
+  digest:
+    uses: jatwell93/software-factory/.github/workflows/factory-digest.yml@__FACTORY_REF__
+    with:
+      factory_ref: __FACTORY_REF__
