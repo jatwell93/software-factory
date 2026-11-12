@@ -77,4 +77,12 @@ export interface SpecSourceAdapter {
    * factory names a finished per-change PR after it.
    */
   archivedTitle(changeId: string): MaybePromise<string>;
+
+  /**
+   * The ids of the active changes that a list of changed repository paths
+   * touches (a PR's files), each once. It reads no file: a change the PR deletes
+   * or renames still counts, and the archive never does. The id check uses it to
+   * look at only the changes a PR touches.
+   */
+  changesIn(paths: string[]): MaybePromise<string[]>;
 }

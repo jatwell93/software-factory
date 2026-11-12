@@ -51,7 +51,7 @@ function defineContractTests(name, create) {
   t('has a name and every operation', (adapter) => {
     assertAdapter(adapter);
     assert.equal(adapter.name, name);
-    assert.equal(OPERATIONS.length, 9);
+    assert.equal(OPERATIONS.length, 10);
   });
 
   t('lists the active change', async (adapter) => {
@@ -115,6 +115,14 @@ function defineContractTests(name, create) {
     assert.equal(await adapter.archivedTitle('no-such-change'), '');
     await adapter.archive(FIXTURE.changeId);
     assert.equal(await adapter.archivedTitle(FIXTURE.changeId), FIXTURE.title);
+  });
+
+  t('names the changes a list of changed paths touches, each once', async (adapter) => {
+    const { path } = await adapter.scaffold('new-thing', { title: 'New thing' });
+    const touched = await adapter.changesIn([`${path}/proposal.md`, `${path}/tasks.md`]);
+    assert.deepEqual(touched, ['new-thing']);
+    assert.deepEqual(await adapter.changesIn(['README.md', 'src/index.js']), []);
+    assert.deepEqual(await adapter.changesIn([]), []);
   });
 
   t('scaffolds a new change and refuses a taken id', async (adapter) => {

@@ -53,6 +53,14 @@ function createStubAdapter() {
     },
     isArchived: (changeId) => archived.has(changeId),
     archivedTitle: (changeId) => archived.get(changeId)?.title ?? '',
+    changesIn: (paths) => [
+      ...new Set(
+        paths
+          .map((p) => /^changes\/([^/]+)\//.exec(p))
+          .filter(Boolean)
+          .map((m) => m[1]),
+      ),
+    ],
   };
 }
 
