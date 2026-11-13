@@ -24,8 +24,14 @@ protected_paths:
   - eslint.ignores.js
   - eslint.complexity-baseline.js
   - scripts/complexity-baseline.test.js
-  # Still vendored until task 3.2 and run by `npm ci` (the prepare script), so a PR
-  # that edited it would execute that edit during runner setup.
+  # `npm ci` runs on the PR branch at runner setup: the prepare script, every
+  # dependency's install scripts and the registry in .npmrc all execute there, so
+  # a PR that edited any of them would run its own code with the runner's token.
+  # A task that needs a new dependency or script is therefore an owner task.
+  - package.json
+  - package-lock.json
+  - .npmrc
+  # Still vendored until task 3.2 and run by the prepare script.
   - scripts/install-git-hooks.js
 
 forbidden_commands:
