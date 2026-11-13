@@ -72,7 +72,8 @@ function runLine(run) {
   const duration =
     agent === null && time !== null ? `${formatDuration(time)} wall` : formatDuration(time);
   const turns = run.record?.turns ? `, ${run.record.turns} turns` : '';
-  return `- ${run.displayTitle} (${run.conclusion}): ${formatCost(run.record?.cost_usd ?? null)}, ${duration}${turns}: ${run.url}`;
+  const denied = run.record?.denied ? `, ${run.record.denied} tool call(s) denied` : '';
+  return `- ${run.displayTitle} (${run.conclusion}): ${formatCost(run.record?.cost_usd ?? null)}, ${duration}${turns}${denied}: ${run.url}`;
 }
 
 /** The total of the costs that are known, and how many runs have none. */
