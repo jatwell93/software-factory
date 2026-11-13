@@ -295,6 +295,7 @@ jobs:
         run: bash -c "$INSTALL"
 
       - name: Run Claude
+        id: claude
         uses: anthropics/claude-code-action@v1
         # Below the job's limit: a step timeout fails the job, so the report job
         # records it for a retry. A job timeout can end the run `cancelled`.
@@ -321,6 +322,30 @@ jobs:
           # The caps and both tool lists come from factory.config.yml, built by
           # factory-env.js. No comments inside the block: it is the raw argument string.
           claude_args: ${{ needs.route.outputs.claude_args }}
+
+      # What the run cost and how long it took, for the daily digest. Whatever the
+      # agent step did, and only when the factory's scripts were set up. The cost
+      # comes from the agent's execution log, which is missing after a crash or a
+      # turn limit: the record then says so instead of guessing.
+      - name: Record the run's cost and duration
+        if: always() && env.FACTORY_DIR != ''
+        shell: bash
+        env:
+          EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
+          CHANGE_ID: ${{ needs.route.outputs.change_id }}
+          MODE: ${{ needs.route.outputs.mode }}
+          PR: ${{ needs.route.outputs.pr }}
+        run: |
+          node "$FACTORY_DIR/scripts/factory-run-record.js" "$RUNNER_TEMP/factory-run-record.json" "$MODE" "$CHANGE_ID" ${PR:+"$PR"} --execution "$EXECUTION_FILE"
+
+      - name: Upload the run record
+        if: always() && env.FACTORY_DIR != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-run-record
+          path: ${{ runner.temp }}/factory-run-record.json
+          retention-days: 14
+          if-no-files-found: ignore
 
   escalate:
     name: Ask the owner to do an owner task

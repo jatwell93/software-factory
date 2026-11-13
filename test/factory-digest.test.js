@@ -21,6 +21,7 @@ function fakeDeps({
   prsParked = [],
   prs = [],
   failed = [],
+  records = {},
   digest = [],
   digestLabel = 'factory-digest',
   parkedLabel = 'needs-human',
@@ -38,7 +39,17 @@ function fakeDeps({
       return JSON.stringify(noun === 'pr' ? prsParked : issues);
     return JSON.stringify(prs);
   };
-  return { calls, gh, summary: (n) => `#${n} settled=true actionable=0` };
+  const records_ = [];
+  return {
+    calls,
+    gh,
+    summary: (n) => `#${n} settled=true actionable=0`,
+    record: (id) => {
+      records_.push(id);
+      return records[id] ?? null;
+    },
+    asked: records_,
+  };
 }
 
 const run = (deps, argv = [], cfg = config) => {
@@ -47,6 +58,7 @@ const run = (deps, argv = [], cfg = config) => {
     config: cfg,
     gh: deps.gh,
     summary: deps.summary,
+    record: deps.record,
     log: (l) => out.push(l),
     now: NOW,
   });
@@ -65,7 +77,7 @@ test('the digest lists parked items, factory PRs only, and failed runs, mentioni
   const deps = fakeDeps({
     issues: [{ number: 703, title: 'factory: add-x', url: 'u703' }],
     prs: [FACTORY_PR, OWNER_PR],
-    failed: [{ displayTitle: 'Factory', url: 'run-url' }],
+    failed: [{ databaseId: 1, displayTitle: 'Factory', conclusion: 'failure', url: 'run-url' }],
   });
   const body = run(deps, ['--dry-run']);
   assert.match(body, /^Factory digest, 2026-10-24\. @octo/);
@@ -73,7 +85,7 @@ test('the digest lists parked items, factory PRs only, and failed runs, mentioni
   assert.match(body, /- #703 factory: add-x/);
   assert.match(body, /- #701 feat\(workers\): name users: `#701 settled=true actionable=0`/);
   assert.doesNotMatch(body, /#9 /);
-  assert.match(body, /- Factory: run-url/);
+  assert.match(body, /- Factory \(failure\): cost unknown, duration unknown: run-url/);
   assert.equal(comments(deps).length, 0, '--dry-run posts nothing');
 });
 
