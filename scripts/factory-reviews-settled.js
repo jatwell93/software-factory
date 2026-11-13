@@ -15,13 +15,16 @@ const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { runCli } = require('../lib/cli.js');
 const { loadConfig } = require('../lib/config.js');
-const { CONTEXT, settledStatus } = require('../lib/reviews-settled.js');
+const { CONTEXT, OWN_CHECKS, settledStatus } = require('../lib/reviews-settled.js');
 const { createRouter, authorOf, isAppAuthor } = require('../lib/router.js');
 
 const defaultGh = (args) => execFileSync('gh', args, { encoding: 'utf8' });
 const FEEDBACK = path.join(__dirname, 'pr-feedback.js');
+const ignoreFlags = OWN_CHECKS.flatMap((name) => ['--ignore-check', name]);
+/** The command line that reads a PR's report without waiting on this status's own checks. */
+const feedbackArgs = (n) => [FEEDBACK, String(n), ...ignoreFlags];
 const defaultFeedback = (n) =>
-  JSON.parse(execFileSync('node', [FEEDBACK, String(n)], { encoding: 'utf8' }));
+  JSON.parse(execFileSync('node', feedbackArgs(n), { encoding: 'utf8' }));
 
 /** The open factory PRs: the given one, or all. */
 function factoryPrs(gh, changeFromLabels, only) {
@@ -86,4 +89,12 @@ function main(argv = process.argv.slice(2), io = {}) {
 
 if (require.main === module) runCli(() => main());
 
-module.exports = { currentStatus, factoryPrs, main, publish };
+module.exports = {
+  defaultFeedback,
+  feedbackArgs,
+  ignoreFlags,
+  currentStatus,
+  factoryPrs,
+  main,
+  publish,
+};
