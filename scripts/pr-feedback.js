@@ -193,6 +193,39 @@ function activityTimes(pr, head, checkRows) {
   ];
 }
 
+/** The earliest of some timestamps, or null. */
+function earliestTime(times) {
+  const valid = times
+    .filter(Boolean)
+    .map((t) => Date.parse(t))
+    .filter(Number.isFinite);
+  return valid.length ? new Date(Math.min(...valid)).toISOString() : null;
+}
+
+/**
+ * Every login that has posted on the PR: in a thread (resolved or not), a review
+ * or a comment. A bot that resolves its own threads still counts as having posted.
+ */
+function postersOf(pr) {
+  const logins = [
+    ...nodes(pr.reviewThreads).flatMap((t) => nodes(t.comments).map(login)),
+    ...nodes(pr.reviews).map(login),
+    ...nodes(pr.comments).map(login),
+  ];
+  return [...new Set(logins)].sort();
+}
+
+/**
+ * When the head was pushed, as well as the report can tell: the later of the head
+ * commit's date and the first check's start. A commit can be dated long before
+ * its push (a rebase, a cherry-pick), but the checks of the head start right
+ * after the push.
+ */
+function lastPushAt(head, checkRows) {
+  const firstCheck = earliestTime((checkRows || []).map((c) => c.startedAt));
+  return latestTime([head.committedDate, firstCheck]);
+}
+
 /** Why the PR is not settled yet; empty when it is. */
 function blockers({ checks, threadsTruncated, quietUntil, now }) {
   const reasons = [];
@@ -209,21 +242,32 @@ function blockers({ checks, threadsTruncated, quietUntil, now }) {
 function summarize(
   pr,
   checkRows,
-  { now = Date.now(), quietMinutes = DEFAULT_QUIET_MINUTES, ciWorkflows = [] } = {},
+  {
+    now = Date.now(),
+    quietMinutes = DEFAULT_QUIET_MINUTES,
+    ciWorkflows = [],
+    ignoreChecks = [],
+  } = {},
 ) {
+  // A caller that is itself a check on the PR (the reviews-settled run and status)
+  // must not wait for itself: its row is pending while it runs, and its start time
+  // would restart the quiet window. A row is ignored by check name or workflow name.
+  const rows = (checkRows || []).filter(
+    (row) => !ignoreChecks.includes(row.name) && !ignoreChecks.includes(row.workflow),
+  );
   const head = nodes(pr.commits)[0]?.commit || {};
   const threads = nodes(pr.reviewThreads)
     .filter((t) => !t.isResolved)
     .map(toThread);
   const reviews = latestReviews(nodes(pr.reviews));
   const comments = nodes(pr.comments).map(toComment);
-  const checks = summarizeChecks(checkRows, ciWorkflows);
+  const checks = summarizeChecks(rows, ciWorkflows);
 
   // The query reads the newest 100 threads. Past that, older unresolved threads
   // would be invisible, so the report refuses to call the PR settled.
   const threadsTruncated = (pr.reviewThreads?.totalCount ?? 0) > nodes(pr.reviewThreads).length;
 
-  const lastActivityAt = latestTime(activityTimes(pr, head, checkRows));
+  const lastActivityAt = latestTime(activityTimes(pr, head, rows));
   const quietUntil = lastActivityAt
     ? new Date(Date.parse(lastActivityAt) + quietMinutes * 60000).toISOString()
     : null;
@@ -236,6 +280,8 @@ function summarize(
     branch: pr.headRefName,
     head: head.oid,
     headCommittedAt: head.committedDate || null,
+    lastPushAt: lastPushAt(head, rows),
+    posters: postersOf(pr),
     checks,
     settled: waitingOn.length === 0,
     waitingOn,
@@ -266,7 +312,10 @@ function repoSlug(gh) {
   return { owner, repo };
 }
 
-function fetchReport(number, { gh = defaultGh, now, quietMinutes, ciWorkflows } = {}) {
+function fetchReport(
+  number,
+  { gh = defaultGh, now, quietMinutes, ciWorkflows, ignoreChecks } = {},
+) {
   const { owner, repo } = repoSlug(gh);
   const raw = gh([
     'api',
@@ -281,7 +330,7 @@ function fetchReport(number, { gh = defaultGh, now, quietMinutes, ciWorkflows } 
     `number=${number}`,
   ]);
   const pr = JSON.parse(raw).data.repository.pullRequest;
-  return summarize(pr, fetchChecks(gh, number), { now, quietMinutes, ciWorkflows });
+  return summarize(pr, fetchChecks(gh, number), { now, quietMinutes, ciWorkflows, ignoreChecks });
 }
 
 // Stands in for checks GitHub has not registered yet, so the PR is not settled.
@@ -338,9 +387,20 @@ function parseQuietMinutes(args) {
   return /^\d+(\.\d+)?$/.test(args[i + 1] ?? '') ? Number(args[i + 1]) : null;
 }
 
+/** Every `--ignore-check NAME`, or null when one has no name. */
+function parseIgnoreChecks(args) {
+  const names = [];
+  for (let i = args.indexOf('--ignore-check'); i >= 0; i = args.indexOf('--ignore-check', i + 1)) {
+    const name = args[i + 1];
+    if (!name || name.startsWith('--')) return null;
+    names.push(name);
+  }
+  return names;
+}
+
 function usage() {
   process.stderr.write(
-    'usage: pr-feedback.js <pr> [--quiet-minutes N] [--summary] | reply <threadId> <body> | resolve <threadId>\n',
+    'usage: pr-feedback.js <pr> [--quiet-minutes N] [--ignore-check NAME]... [--summary] | reply <threadId> <body> | resolve <threadId>\n',
   );
   return 2;
 }
@@ -367,10 +427,11 @@ function main(argv, { gh = defaultGh, out = process.stdout, root = process.cwd()
     return 0;
   }
   const quietMinutes = parseQuietMinutes(rest);
-  if (!/^\d+$/.test(cmd || '') || quietMinutes === null) return usage();
+  const ignoreChecks = parseIgnoreChecks(rest);
+  if (!/^\d+$/.test(cmd || '') || quietMinutes === null || ignoreChecks === null) return usage();
   const ciWorkflows = ciWorkflowsOf(root);
   if (ciWorkflows === null) return 2;
-  const report = fetchReport(Number(cmd), { gh, quietMinutes, ciWorkflows });
+  const report = fetchReport(Number(cmd), { gh, quietMinutes, ciWorkflows, ignoreChecks });
   out.write(
     rest.includes('--summary')
       ? `${formatSummary(report)}\n`

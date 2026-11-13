@@ -459,3 +459,51 @@ test('a pending check of a configured workflow is listed once even when a passed
   );
   assert.deepEqual(checks.pendingActions, ['test']);
 });
+
+test('posters lists every login that posted, including one whose thread is resolved', () => {
+  const report = summarize(
+    pr({
+      reviewThreads: {
+        nodes: [
+          thread('T1', { resolved: true, author: 'sentry', replies: ['jatwell93'] }),
+          thread('T2', { author: 'codescene-delta-analysis' }),
+        ],
+      },
+      reviews: {
+        nodes: [
+          {
+            author: { login: 'copilot-pull-request-reviewer' },
+            state: 'COMMENTED',
+            submittedAt: '2026-10-21T10:00:00Z',
+            body: '',
+          },
+        ],
+      },
+      comments: {
+        nodes: [{ author: { login: 'claude' }, createdAt: '2026-10-21T10:00:00Z', body: 'x' }],
+      },
+    }),
+    [],
+    { now: NOW },
+  );
+  assert.deepEqual(report.posters, [
+    'claude',
+    'codescene-delta-analysis',
+    'copilot-pull-request-reviewer',
+    'jatwell93',
+    'sentry',
+  ]);
+  assert.deepEqual(summarize(pr(), [], { now: NOW }).posters, []);
+});
+
+test('lastPushAt is the later of the head commit date and the first check start', () => {
+  const at = (checks) => summarize(pr(), checks, { now: NOW }).lastPushAt;
+  // Commit dated 11:00; checks started at 11:20 and 11:30: the push was about 11:20.
+  assert.equal(
+    at([{ startedAt: '2026-10-21T11:30:00Z' }, { startedAt: '2026-10-21T11:20:00Z' }]),
+    '2026-10-21T11:20:00.000Z',
+  );
+  // A check that started before the commit date (a rerun of an old one) does not move it back.
+  assert.equal(at([{ startedAt: '2026-10-21T09:00:00Z' }]), '2026-10-21T11:00:00.000Z');
+  assert.equal(at([]), '2026-10-21T11:00:00.000Z');
+});

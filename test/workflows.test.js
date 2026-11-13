@@ -106,7 +106,12 @@ test('every checkout takes the default branch or the factory at its pin, never t
 });
 
 test('a workflow that runs factory scripts checks out the project first, then the factory', () => {
-  for (const name of ['no-go-guard.yml', 'factory-digest.yml', 'check-change-ids.yml']) {
+  for (const name of [
+    'no-go-guard.yml',
+    'factory-digest.yml',
+    'check-change-ids.yml',
+    'reviews-settled.yml',
+  ]) {
     const uses = steps(readReusable(name)).filter((s) => /^actions\/checkout@/.test(s.uses));
     assert.equal(uses[0].with.repository, undefined, `${name}: the project first`);
     assert.equal(uses[1].with.repository, 'jatwell93/software-factory', name);
@@ -223,6 +228,12 @@ test('each reusable workflow declares exactly the permissions it needs', () => {
       statuses: 'read',
     },
     'check-change-ids.yml': { contents: 'read', 'pull-requests': 'read', statuses: 'write' },
+    'reviews-settled.yml': {
+      contents: 'read',
+      'pull-requests': 'read',
+      checks: 'read',
+      statuses: 'write',
+    },
     'factory.yml': {
       contents: 'write',
       'pull-requests': 'write',
@@ -245,6 +256,7 @@ test('a workflow that runs factory scripts requires the pin, so it cannot run an
     'factory-digest.yml',
     'check-change-ids.yml',
     'factory.yml',
+    'reviews-settled.yml',
   ]) {
     const input = readReusable(name).on.workflow_call.inputs.factory_ref;
     assert.equal(input.required, true, name);
@@ -273,4 +285,22 @@ test('a pull_request_target workflow reports its result as a commit status on th
     );
     assert.equal(readReusable(name).permissions.statuses, 'write', name);
   }
+});
+
+test('the reviews-settled caller triggers on PR and review events and a schedule, and posts nothing itself', () => {
+  const on = caller('reviews-settled.yml').on;
+  assert.deepEqual(Object.keys(on).sort(), [
+    'pull_request',
+    'pull_request_review',
+    'pull_request_review_comment',
+    'schedule',
+    'workflow_dispatch',
+  ]);
+  assert.ok(!('pull_request_target' in on), 'it never needs a write token for PR code');
+  const text = fs.readFileSync(path.join(WORKFLOWS, 'reviews-settled.yml'), 'utf8');
+  assert.match(text, /factory-reviews-settled\.js \$\{PR_NUMBER:\+"\$PR_NUMBER"\}/);
+  assert.equal(
+    readReusable('reviews-settled.yml').jobs.settle.env.PR_NUMBER,
+    '${{ github.event.pull_request.number || inputs.pr }}',
+  );
 });
