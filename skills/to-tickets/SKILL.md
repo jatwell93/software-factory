@@ -26,7 +26,9 @@ label is `<prefix><id>`, written `<change-label>` below), `labels.ready` (defaul
 `factory-ready`), `change_id_max_length` and `default_branch`.
 
 The factory's scripts are in `$FACTORY_DIR/scripts`. The runner sets
-`$FACTORY_DIR`; locally, set it to a checkout of the factory first.
+`$FACTORY_DIR`; locally, set it to a checkout of the factory first. The
+runner denies a command that contains a shell variable, so there the prompt
+gives the literal path: write it in place of `$FACTORY_DIR`.
 
 ## 1. Read the change
 
@@ -93,13 +95,13 @@ decision (a schema, a state machine) more exactly than prose can.
 
 ## 5. Publish the tickets
 
-1. Tracking issue: `n=$(node "$FACTORY_DIR/scripts/factory-issue.js" <id>)` (it finds, adopts
+1. Tracking issue: `node "$FACTORY_DIR/scripts/factory-issue.js" <id>` (it prints the issue number, `<n>`; it finds, adopts
    or creates the one labelled `<change-label>`).
 2. For each task in file order (blockers first, so their numbers exist):
 
    ```bash
    gh issue create --title "<id> <task number>: <title>" --body-file <file> \
-     --parent "$n" [--blocked-by <issue>,<issue>]
+     --parent <n> [--blocked-by <issue>,<issue>]
    ```
 
    Body: `## What to build` (end-to-end behaviour), `## Demo`, `## Acceptance

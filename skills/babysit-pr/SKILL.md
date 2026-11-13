@@ -21,7 +21,9 @@ Read `factory.config.yml`: `owner` (written `<owner>`), `default_branch`,
 count), `ci_workflows` and `max_babysit_rounds` (default 5, written `<cap>`).
 
 The factory's scripts are in `$FACTORY_DIR/scripts`. The runner sets
-`$FACTORY_DIR`; locally, set it to a checkout of the factory first.
+`$FACTORY_DIR`; locally, set it to a checkout of the factory first. The
+runner denies a command that contains a shell variable, so there the prompt
+gives the literal path: write it in place of `$FACTORY_DIR`.
 
 ## The loop
 

@@ -27,7 +27,9 @@ Read `factory.config.yml` first. This skill names these keys:
 - `gates`: the commands to run before a push (section 3).
 
 The factory's scripts are in `$FACTORY_DIR/scripts`. The runner sets
-`$FACTORY_DIR`; locally, set it to a checkout of the factory first.
+`$FACTORY_DIR`; locally, set it to a checkout of the factory first. The
+runner denies a command that contains a shell variable, so there the prompt
+gives the literal path: write it in place of `$FACTORY_DIR`.
 
 ## 1. Check nothing is in flight
 
@@ -37,8 +39,8 @@ The factory's scripts are in `$FACTORY_DIR/scripts`. The runner sets
 - Read `openspec/changes/<id>/handover.md`. If "Waiting on the user" lists a
   decision that blocks the next task, and the tracking issue (below) has no
   answer to it, stop and say which.
-- Read the tracking issue: `n=$(node "$FACTORY_DIR/scripts/factory-issue.js" <id>)`, then
-  `gh issue view "$n" --comments`. If it still has the `needs_human` label, stop: the
+- Read the tracking issue: `node "$FACTORY_DIR/scripts/factory-issue.js" <id>` (it prints the issue number, `<n>`), then
+  `gh issue view <n> --comments`. If it still has the `needs_human` label, stop: the
   owner has not answered. If the owner commented after the factory's last
   escalation, that comment is the decision. Follow it for this task, and record it
   in `handover.md` under "Decisions" (the question, the answer, and a link to the
@@ -175,10 +177,10 @@ The prompt says when a run is an archive run: every numbered task in
 
 ## Escalate
 
-1. Find the change's tracking issue: `n=$(node "$FACTORY_DIR/scripts/factory-issue.js" <id>)`.
-   It reuses the issue labelled `<change-label>`, else adopts the issue the
+1. Find the change's tracking issue: `node "$FACTORY_DIR/scripts/factory-issue.js" <id>`.
+   It prints the issue number, `<n>`. It reuses the issue labelled `<change-label>`, else adopts the issue the
    proposal names in its `## Autonomy` block (`issue: N`), else creates one.
-2. `gh issue edit "$n" --add-label <needs_human label>`, then comment: `@<owner>` and
+2. `gh issue edit <n> --add-label <needs_human label>`, then comment: `@<owner>` and
    the task number, what blocks it, the options you see, and your
    recommendation. End with: "Answer here, then remove `<needs_human label>` to resume."
 3. If a PR already exists for the task, add the label to it as well, except

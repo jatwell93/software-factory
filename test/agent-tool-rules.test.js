@@ -30,7 +30,7 @@ test('no helper that can change files, reach the network or print the environmen
 test('the prompt tells the agent to run one command per call and not to chain or cd', () => {
   assert.match(workflow, /Run one command per Bash call/);
   assert.match(workflow, /no `;`, `&&` or `cd` chains/);
-  assert.match(workflow, /do not print the variable/);
+  assert.match(workflow, /Never put a shell variable or `\$\(\.\.\.\)` in a command/);
   assert.match(workflow, /If a command is denied, do not retry it/);
 });
 
@@ -38,4 +38,13 @@ test('the prompt rules sit in the prompt block, not in a YAML comment', () => {
   const line = workflow.split('\n').find((l) => l.includes('Run one command per Bash call'));
   assert.ok(line.startsWith('            Run one command'), 'indented as prompt text');
   assert.ok(!line.trim().startsWith('#'));
+});
+
+test('the prompt gives the factory path as the runner temp directory the workflow moved it to', () => {
+  assert.match(workflow, /scripts are in `\$\{\{ runner\.temp \}\}\/software-factory\/scripts`/);
+  assert.match(workflow, /write `\$\{\{ runner\.temp \}\}\/software-factory` instead/);
+  assert.ok(
+    workflow.includes('echo "FACTORY_DIR=$RUNNER_TEMP/software-factory"'),
+    'the same directory the move step uses',
+  );
 });
