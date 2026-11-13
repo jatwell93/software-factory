@@ -4,7 +4,7 @@ description: >-
   Implement exactly one unchecked task of a spec change (OpenSpec), unattended, and
   open a PR for it: check nothing is already in flight, read the handover and the
   task, implement and test it, run the gates and the no_go check, tick the task,
-  update handover.md, push and open a PR labelled with the change. Escalate with the
+  update handover.md, push and open a PR labelled with the change. Escalate with
   the needs_human label instead of guessing. Used by the factory runner as
   "/run-spec <change-id>"; also usable locally to dry-run the factory.
 ---

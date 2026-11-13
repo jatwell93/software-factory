@@ -47,6 +47,10 @@ for (const name of SKILLS) {
     }
   });
 
+  test(`${name}: repeats no word, even across a line break`, () => {
+    assert.doesNotMatch(body(name), /\b(\w+)\s+\1\b/i);
+  });
+
   test(`${name}: needs no memory store`, () => {
     assert.doesNotMatch(body(name), /mem-log|mem-recall|memory\.jsonl/);
   });
