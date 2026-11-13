@@ -11,7 +11,7 @@
  */
 const fs = require('node:fs');
 const { runCli } = require('../lib/cli.js');
-const { buildRecord } = require('../lib/run-record.js');
+const { buildRecord, denialLines } = require('../lib/run-record.js');
 
 const MODES = ['task', 'archive', 'babysit'];
 
@@ -47,8 +47,10 @@ function main(argv = process.argv.slice(2), io = {}) {
     return 2;
   }
   const read = io.read || ((file) => fs.readFileSync(file, 'utf8'));
+  const executionText = readLog(executionFile, read);
+  for (const line of denialLines(executionText)) (io.log || console.log)(line);
   const record = buildRecord({
-    executionText: readLog(executionFile, read),
+    executionText,
     mode,
     changeId,
     pr,

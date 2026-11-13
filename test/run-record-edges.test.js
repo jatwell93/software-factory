@@ -12,7 +12,12 @@ test('only a result message counts, even when a later message has the same field
     { type: 'result', total_cost_usd: 1, duration_ms: 1000, num_turns: 1 },
     { type: 'assistant', total_cost_usd: 99, duration_ms: 99000, num_turns: 99 },
   ]);
-  assert.deepEqual(parseExecution(log), { cost_usd: 1, duration_ms: 1000, turns: 1 });
+  assert.deepEqual(parseExecution(log), {
+    cost_usd: 1,
+    duration_ms: 1000,
+    turns: 1,
+    denied: null,
+  });
 });
 
 test('an undefined cost is unknown, not an error', () => {
@@ -61,4 +66,85 @@ test('a run with no record, or an unreadable one, gives null and leaves nothing 
   };
   assert.equal(defaultRecord(1, garbled), null);
   assert.equal(fs.existsSync(dir), false);
+});
+
+const { denialLines } = require('../lib/run-record.js');
+const { main: recordMain } = require('../scripts/factory-run-record.js');
+
+const DENIED = [
+  {
+    tool_name: 'Bash',
+    tool_input: { command: 'n=$(node "$FACTORY_DIR/scripts/factory-issue.js" x)' },
+  },
+  { tool_name: 'Read', tool_input: { file_path: '/tmp/software-factory/lib/a.js' } },
+  { tool_name: 'Odd' },
+];
+const logWith = (result) => JSON.stringify([{ type: 'result', ...result }]);
+
+test('denied tool calls are counted from the list, else from the count field', () => {
+  assert.equal(parseExecution(logWith({ permission_denials: DENIED })).denied, 3);
+  assert.equal(parseExecution(logWith({ permission_denials: [] })).denied, 0);
+  assert.equal(parseExecution(logWith({ permission_denials_count: 4 })).denied, 4);
+  assert.equal(parseExecution(logWith({ permission_denials_count: '4' })).denied, null);
+  assert.equal(parseExecution(logWith({})).denied, null);
+});
+
+test('each denied call is one short line naming the tool and what it tried', () => {
+  assert.deepEqual(denialLines(logWith({ permission_denials: DENIED })), [
+    'denied: Bash n=$(node "$FACTORY_DIR/scripts/factory-issue.js" x)',
+    'denied: Read /tmp/software-factory/lib/a.js',
+    'denied: Odd',
+  ]);
+});
+
+test('denial lines are capped, shortened and single-line; no list gives none', () => {
+  const many = Array.from({ length: 30 }, () => ({
+    tool_name: 'Bash',
+    tool_input: { command: 'echo ' + 'x'.repeat(500) + '\nsecond line' },
+  }));
+  const lines = denialLines(logWith({ permission_denials: many }));
+  assert.equal(lines.length, 10);
+  assert.ok(lines.every((l) => l.length <= 100 && !/[\r\n]/.test(l)));
+  assert.equal(denialLines(logWith({ permission_denials: many }), 2).length, 2);
+  assert.deepEqual(denialLines(logWith({})), []);
+  assert.deepEqual(denialLines(''), []);
+});
+
+test('the record script prints the denials and stores their count', () => {
+  const printed = [];
+  let written;
+  const code = recordMain(['out.json', 'task', 'add-x', '--execution', 'log.json'], {
+    read: () => logWith({ total_cost_usd: 1, permission_denials: DENIED }),
+    write: (file, text) => (written = JSON.parse(text)),
+    log: (line) => printed.push(line),
+  });
+  assert.equal(code, 0);
+  assert.equal(printed.length, 3);
+  assert.equal(written.denied, 3);
+});
+
+test('the digest says how many tool calls a run was denied, and nothing when none', () => {
+  const run = (denied) => ({
+    displayTitle: 'Factory',
+    conclusion: 'success',
+    url: 'u',
+    record: { cost_usd: 0.1, duration_ms: 1000, turns: 2, denied },
+  });
+  assert.match(
+    require('../scripts/factory-digest.js').runLine(run(4)),
+    /2 turns, 4 tool call\(s\) denied: u$/,
+  );
+  assert.doesNotMatch(require('../scripts/factory-digest.js').runLine(run(0)), /denied/);
+  assert.doesNotMatch(require('../scripts/factory-digest.js').runLine(run(null)), /denied/);
+});
+
+test('a newline or tab inside a denied command never breaks the log line', () => {
+  const list = [{ tool_name: 'Bash', tool_input: { command: 'echo a\nb\tc\r\nd' } }];
+  assert.deepEqual(denialLines(logWith({ permission_denials: list })), [
+    'denied: Bash echo a b c d',
+  ]);
+});
+
+test('a denial with no tool name still gets a line', () => {
+  assert.deepEqual(denialLines(logWith({ permission_denials: [{}] })), ['denied: unknown tool']);
 });

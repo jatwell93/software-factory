@@ -17,7 +17,12 @@ const LOG = JSON.stringify([
 ]);
 
 test('cost, duration and turns come from the last result message', () => {
-  assert.deepEqual(parseExecution(LOG), { cost_usd: 1.2345, duration_ms: 372000, turns: 31 });
+  assert.deepEqual(parseExecution(LOG), {
+    cost_usd: 1.2345,
+    duration_ms: 372000,
+    turns: 31,
+    denied: null,
+  });
   const two = JSON.stringify([
     { type: 'result', total_cost_usd: 1, duration_ms: 1, num_turns: 1 },
     { type: 'result', total_cost_usd: 2, duration_ms: 2, num_turns: 2 },
@@ -29,12 +34,17 @@ test('a log of JSON lines is read too', () => {
   const lines = ['{"type":"system"}', 'not json', '{"type":"result","total_cost_usd":0.5}'].join(
     '\n',
   );
-  assert.deepEqual(parseExecution(lines), { cost_usd: 0.5, duration_ms: null, turns: null });
+  assert.deepEqual(parseExecution(lines), {
+    cost_usd: 0.5,
+    duration_ms: null,
+    turns: null,
+    denied: null,
+  });
   assert.equal(messagesOf('{"type":"result"}').length, 1, 'a single object');
 });
 
 test('a missing, empty, garbled or result-less log gives nulls, never a made-up number', () => {
-  const unknown = { cost_usd: null, duration_ms: null, turns: null };
+  const unknown = { cost_usd: null, duration_ms: null, turns: null, denied: null };
   for (const text of [undefined, '', '   ', 'garbage', '[]', '[{"type":"assistant"}]', 'null']) {
     assert.deepEqual(parseExecution(text), unknown, String(text));
   }
@@ -51,6 +61,7 @@ test('the record names what ran and on which change and PR', () => {
     cost_usd: 1.2345,
     duration_ms: 372000,
     turns: 31,
+    denied: null,
   });
   assert.equal(buildRecord({ executionText: '', mode: 'task', changeId: 'a', pr: '' }).pr, null);
 });
