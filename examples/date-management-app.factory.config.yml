@@ -24,6 +24,9 @@ protected_paths:
   - eslint.ignores.js
   - eslint.complexity-baseline.js
   - scripts/complexity-baseline.test.js
+  # Still vendored until task 3.2 and run by `npm ci` (the prepare script), so a PR
+  # that edited it would execute that edit during runner setup.
+  - scripts/install-git-hooks.js
 
 forbidden_commands:
   - npm run test:prod
