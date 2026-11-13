@@ -34,6 +34,18 @@ for (const name of SKILLS) {
     }
   });
 
+  test(`${name}: no command of it holds a shell variable of its own or a command substitution`, () => {
+    // The runner denies any command containing a shell variable, so $FACTORY_DIR is the
+    // one variable a skill may name, and the prompt gives its literal path.
+    const text = body(name).replaceAll('$FACTORY_DIR', '');
+    assert.doesNotMatch(text, /\$\(/, 'a command substitution');
+    assert.doesNotMatch(text, /\$[A-Za-z_{]/, 'a shell variable');
+  });
+
+  test(`${name}: says the runner's prompt gives the literal factory path`, () => {
+    assert.match(body(name), /the prompt\s+gives the literal path/);
+  });
+
   test(`${name}: names no project, owner, label or branch of one repository`, () => {
     const text = body(name);
     assert.doesNotMatch(text, /jatwell93|date-management/i);
