@@ -25,6 +25,7 @@ Plan a change with an agent, then let it build the change task by task as pull r
 - `templates/workflows/*`, `lib/callers.js`: the thin caller workflows `init` writes into a project (triggers, permissions, the pin). The relay's `workflow_run` list is rendered from `ci_workflows`. A pin must be a commit SHA or a `v*` tag.
 - `lib/cli.js`: runs a script and turns a bad config or malformed spec file into exit code 2.
 - `lib/adapters.js`: loads the adapter the config's `spec_source` names.
+- `scripts/factory-init.js`, `lib/init.js`, `lib/detect.js`, `templates/agents-block.md`: `init`. Run from a project's root (`node $FACTORY_DIR/scripts/factory-init.js`), it detects the stack (Node, Python, Go, Rust), the owner and default branch from `origin`, and the project's CI workflow names, then writes `factory.config.yml` (never overwritten), the six caller workflows pinned to `--ref` (default: the commit of this checkout, which must be pushed), the five skills, a marked block in `AGENTS.md`, and `.githooks`; runs the spec source's setup; creates the missing labels; and prints the steps only the owner can do. It asks for `--gate` or `--ci-workflow` when it finds none, because a factory with no gate would call every change good. It decides everything before it writes, and a second run changes nothing. A differing workflow or skill is skipped unless `--force`; a project's own hooks are skipped unless `--adopt-hooks`. `--dry-run` writes and calls nothing.
 - `scripts/check-change-ids.js`: fails on a change folder whose id the factory cannot run.
 
 ```
