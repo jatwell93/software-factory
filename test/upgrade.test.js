@@ -222,3 +222,16 @@ test('parseArgs reads the flags and rejects the rest', () => {
   );
   assert.equal(SKILLS.length, 5);
 });
+
+test('a refused ref reports GitHub answer, not the command line', () => {
+  const { root } = initialised();
+  const gh = () => {
+    throw Object.assign(new Error('Command failed: gh api repos/x/commits/y --jq .sha\nnope'), {
+      stderr: 'gh: No commit found for SHA: y (HTTP 422)',
+    });
+  };
+  assert.throws(
+    () => runUpgrade({ root, ref: NEW, checkoutCommit: NEW }, { gh }),
+    (error) => /No commit found/.test(error.message) && !/Command failed/.test(error.message),
+  );
+});

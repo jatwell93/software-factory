@@ -380,3 +380,26 @@ test('force pushes warn when the ruleset has checks but no non_fast_forward rule
   const gh = healthyGh({ 'api repos/octo/app/rules/branches/main': JSON.stringify(checks) });
   assert.equal(find(runDoctor(root, { git, gh }), 'force pushes').status, 'warn');
 });
+
+const ghError = (command, stderr) =>
+  Object.assign(new Error(`Command failed: ${command}\n${stderr}`), { stderr });
+
+test('a 422 "No commit found" for the pin fails, as a 404 does', () => {
+  const { root, git } = initialised();
+  const key = `api repos/${REPO}/commits/${SHA} --jq .sha`;
+  const error = ghError(`gh ${key}`, `gh: No commit found for SHA: ${SHA} (HTTP 422)`);
+  const result = find(runDoctor(root, { git, gh: healthyGh({ [key]: error }) }), 'pin');
+  assert.equal(result.status, 'fail');
+  assert.match(result.fix, /factory-upgrade/);
+});
+
+test('a pin whose SHA contains 404 is not a failure when GitHub answers something else', () => {
+  const lucky = `404${'b'.repeat(37)}`;
+  const { root, git } = initialised(lucky);
+  const key = `api repos/${REPO}/commits/${lucky} --jq .sha`;
+  const error = ghError(`gh ${key}`, 'gh: Bad Gateway (HTTP 502)');
+  const result = find(runDoctor(root, { git, gh: healthyGh({ [key]: error }) }), 'pin');
+  assert.equal(result.status, 'skip');
+  assert.match(result.detail, /Bad Gateway/);
+  assert.doesNotMatch(result.detail, /Command failed/);
+});
