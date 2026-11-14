@@ -72,13 +72,34 @@ test('an ignored check does not move the push time, even when it started first',
     summarize(pr(), early, { now: NOW, ignoreChecks: OWN }).lastPushAt,
     '2026-10-21T11:20:00.000Z',
   );
-  assert.equal(summarize(pr(), early, { now: NOW }).lastPushAt, '2026-10-21T11:10:00.000Z');
+  assert.equal(
+    summarize(pr(), early, { now: NOW }).lastPushAt,
+    '2026-10-21T11:20:00.000Z',
+    'the factory own status is ignored with no list too',
+  );
+  const other = [{ ...early[0], name: 'other/status' }, early[1]];
+  assert.equal(summarize(pr(), other, { now: NOW }).lastPushAt, '2026-10-21T11:10:00.000Z');
 });
 
-test('without the ignore list the report waits on its own run, and on its quiet window', () => {
+test('with no ignore list the factory own reviews-settled run and status never hold a report', () => {
+  // The first live run stalled: the status stayed pending, so the router waited on
+  // checks, and the router is what starts the event that refreshes the status.
   const report = summarize(pr(), rows(), { now: NOW });
-  assert.equal(report.settled, false);
-  assert.deepEqual(report.waitingOn, ['checks', 'quiet window']);
+  assert.deepEqual(report.checks.pending, []);
+  assert.equal(report.settled, true);
+  assert.deepEqual(report.waitingOn, []);
+});
+
+test('a pending check that is not the factory own still holds the report', () => {
+  const extra = {
+    name: 'Workers Test 2',
+    bucket: 'pending',
+    workflow: 'Workers Test 2',
+    startedAt: '2026-10-21T11:59:00Z',
+  };
+  const held = summarize(pr(), [...rows(), extra], { now: NOW });
+  assert.deepEqual(held.checks.pending, ['Workers Test 2']);
+  assert.equal(held.settled, false);
 });
 
 test('a failing ignored check does not count as a failure either', () => {

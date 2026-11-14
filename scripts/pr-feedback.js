@@ -32,6 +32,7 @@
 
 const { execFileSync } = require('node:child_process');
 const { ConfigError, loadConfig } = require('../lib/config.js');
+const { OWN_CHECKS } = require('../lib/reviews-settled.js');
 
 const DEFAULT_QUIET_MINUTES = 10;
 const BODY_LIMIT = 4000;
@@ -249,11 +250,14 @@ function summarize(
     ignoreChecks = [],
   } = {},
 ) {
-  // A caller that is itself a check on the PR (the reviews-settled run and status)
-  // must not wait for itself: its row is pending while it runs, and its start time
-  // would restart the quiet window. A row is ignored by check name or workflow name.
+  // The reviews-settled run and status are never a reason to wait, for any caller.
+  // Its status stays pending until a later event refreshes it, and the router (which
+  // starts that event) waits for the checks to finish: counting it would stall every
+  // per-change PR for good (the first live run did). Its start time would also restart
+  // the quiet window. A row is ignored by check name or workflow name.
+  const ignored = [...OWN_CHECKS, ...ignoreChecks];
   const rows = (checkRows || []).filter(
-    (row) => !ignoreChecks.includes(row.name) && !ignoreChecks.includes(row.workflow),
+    (row) => !ignored.includes(row.name) && !ignored.includes(row.workflow),
   );
   const head = nodes(pr.commits)[0]?.commit || {};
   const threads = nodes(pr.reviewThreads)
