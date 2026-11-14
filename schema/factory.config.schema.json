@@ -58,7 +58,7 @@
       "default": []
     },
     "review_bots": {
-      "description": "Logins of the review bots, without the [bot] suffix. A bot the factory has a profile for gets that profile; any other is treated as a plain review author.",
+      "description": "Logins of the review bots, without the [bot] suffix. These bots may start a factory run with their reviews, and `factory/reviews-settled` waits for each to post. The factory has no per-bot behaviour: every review author is treated alike.",
       "type": "array",
       "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
       "uniqueItems": true,
