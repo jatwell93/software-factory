@@ -91,6 +91,7 @@ jobs:
       retry: ${{ steps.route.outputs.retry }}
       per_change: ${{ steps.route.outputs.per_change }}
       node_version: ${{ steps.env.outputs.node_version }}
+      python_version: ${{ steps.env.outputs.python_version }}
       install: ${{ steps.env.outputs.install }}
       default_branch: ${{ steps.env.outputs.default_branch }}
       rules: ${{ steps.env.outputs.rules }}
@@ -287,6 +288,15 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: ${{ needs.route.outputs.node_version }}
+
+      # Only a project that sets runner.python_version gets Python: the hosted image's
+      # system Python refuses a plain `pip install` (externally managed) and has no
+      # fixed version, so a Python project's install and gates would not be reproducible.
+      - name: Setup Python
+        if: needs.route.outputs.python_version != ''
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ needs.route.outputs.python_version }}
 
       - name: Install the project's dependencies
         shell: bash
