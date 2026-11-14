@@ -106,3 +106,17 @@ test('ownerFromRemote reads https and ssh remotes', () => {
   assert.equal(ownerFromRemote('https://example.com/octo/app'), '');
   assert.equal(ownerFromRemote(''), '');
 });
+
+test('Yarn Berry installs with --immutable, Yarn classic with --frozen-lockfile', () => {
+  const install = (files) => detectStack(dir({ 'yarn.lock': '', ...files })).install;
+  assert.equal(install({ 'package.json': pkg({}), '.yarnrc.yml': '' }), 'yarn install --immutable');
+  assert.equal(
+    install({ 'package.json': pkg({}, { packageManager: 'yarn@4.1.0' }) }),
+    'yarn install --immutable',
+  );
+  assert.equal(
+    install({ 'package.json': pkg({}, { packageManager: 'yarn@1.22.19' }) }),
+    'yarn install --frozen-lockfile',
+  );
+  assert.equal(install({ 'package.json': pkg({}) }), 'yarn install --frozen-lockfile');
+});

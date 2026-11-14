@@ -345,3 +345,29 @@ test('parseArgs rejects an unknown flag and a flag with no value', () => {
   );
   assert.throws(() => parseArgs(['--owner', '--force']), /needs a value/);
 });
+
+test('--adopt-hooks keeps the project hooks when the installer declines', () => {
+  const { root, git } = project();
+  git(['config', 'core.hooksPath', 'elsewhere']);
+  fs.mkdirSync(path.join(root, '.githooks'));
+  const own = path.join(root, '.githooks', 'pre-commit');
+  fs.writeFileSync(own, '#!/bin/sh\necho mine\n', { mode: 0o755 });
+  const result = runInit({ root, ref: REF, adoptHooks: true }, fakeIo(git));
+  assert.equal(fs.readFileSync(own, 'utf8'), '#!/bin/sh\necho mine\n');
+  assert.equal(statusOf(result, '.githooks/pre-commit'), 'skipped');
+  assert.ok(result.warnings.some((w) => /core.hooksPath is already elsewhere/.test(w)));
+  assert.equal(git(['config', '--get', 'core.hooksPath']), 'elsewhere');
+});
+
+test('--adopt-hooks keeps the project hooks when the installer throws', () => {
+  const { root, git } = project();
+  fs.mkdirSync(path.join(root, '.githooks'));
+  const own = path.join(root, '.githooks', 'pre-commit');
+  fs.writeFileSync(own, '#!/bin/sh\necho mine\n');
+  const failing = (args) => {
+    if (args[0] === 'config' && args[1] === 'core.hooksPath' && args[2]) throw new Error('boom');
+    return git(args);
+  };
+  assert.throws(() => runInit({ root, ref: REF, adoptHooks: true }, fakeIo(failing)), /boom/);
+  assert.equal(fs.readFileSync(own, 'utf8'), '#!/bin/sh\necho mine\n');
+});
