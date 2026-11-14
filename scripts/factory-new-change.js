@@ -14,12 +14,11 @@
  */
 
 const { runCli } = require('../lib/cli.js');
-const { idProblem } = require('../lib/change-id.js');
+const { idProblem, titleProblem } = require('../lib/change-id.js');
 const { loadConfig, maxIdLength } = require('../lib/config.js');
 const { loadAdapter } = require('../lib/adapters.js');
 
 const USAGE = 'usage: factory-new-change.js <id> [--title <text>]';
-const CONTROL = /[\u0000-\u001f\u007f]/;
 
 function usage(message) {
   return Object.assign(new Error(message), { userError: true });
@@ -47,9 +46,8 @@ function main(argv = process.argv.slice(2), root = process.cwd(), log = console.
   const config = loadConfig(root);
   const problem = idProblem(id, maxIdLength(config));
   if (problem) throw usage(problem);
-  // The title becomes the proposal's heading: a line break would let it write the rest of the file.
-  if (title !== undefined && CONTROL.test(title))
-    throw usage('--title cannot contain a line break');
+  const titleIssue = title === undefined ? '' : titleProblem(title);
+  if (titleIssue) throw usage(`--title: ${titleIssue}`);
   if (id === 'archive') throw usage('archive is reserved for finished changes');
   const spec = adapter || loadAdapter(config, { root });
   if (spec.listChanges().some((change) => change.id === id)) throw usage(`change ${id} exists`);

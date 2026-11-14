@@ -15,7 +15,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
-const { ID_PATTERN, idProblem } = require('../lib/change-id.js');
+const { ID_PATTERN, idProblem, titleProblem } = require('../lib/change-id.js');
 
 const NAME = 'openspec';
 const TASK_NUMBER = /^[0-9][0-9A-Za-z.]{0,19}$/;
@@ -345,6 +345,10 @@ function createOpenSpecAdapter({
       const problem = idProblem(changeId, maxIdLength);
       if (problem) throw new Error(problem);
       if (changeId === 'archive') throw new Error('archive is reserved for finished changes');
+      if (title !== undefined) {
+        const titleIssue = titleProblem(title);
+        if (titleIssue) throw new Error(titleIssue);
+      }
       const dir = dirOf(changeId);
       if (fs.existsSync(dir)) throw new Error(`change ${changeId} exists`);
       fs.mkdirSync(dir, { recursive: true });
