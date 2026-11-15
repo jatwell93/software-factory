@@ -3,7 +3,7 @@
  * Print the config values a workflow needs before it can set up the runner, as
  * lines for $GITHUB_OUTPUT:
  *
- *   node_version=<n>  install=<command>  default_branch=<name>
+ *   node_version=<n>  python_version=<n or empty>  install=<command>  default_branch=<name>
  *
  * With `--run`, also what the agent's run needs:
  *
@@ -45,6 +45,7 @@ function multiline(key, value) {
 function envLines(config, { run = false } = {}) {
   const lines = singleLines({
     node_version: config.runner.node_version,
+    python_version: config.runner.python_version ?? '',
     install: config.runner.install,
     default_branch: config.default_branch,
   });

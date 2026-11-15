@@ -14,6 +14,7 @@ const { tempRoot } = require('./helpers.js');
 test('prints the defaults for a minimal config', () => {
   assert.deepEqual(envLines(loadConfig(tempRoot())), [
     'node_version=22',
+    'python_version=',
     'install=npm ci',
     'default_branch=main',
   ]);
@@ -35,6 +36,7 @@ test('prints the configured Node version, install command and default branch', (
   );
   assert.deepEqual(envLines(config), [
     'node_version=20.11',
+    'python_version=',
     'install=pnpm install --frozen-lockfile',
     'default_branch=trunk',
   ]);
@@ -52,7 +54,7 @@ test('main reads the config in the folder it is given', () => {
     main([], tempRoot(), (l) => lines.push(l)),
     0,
   );
-  assert.equal(lines[0].split('\n').length, 3);
+  assert.equal(lines[0].split('\n').length, 4);
 });
 
 test('--run adds the rules, bots, timeouts and a heredoc of agent arguments', () => {
@@ -76,7 +78,7 @@ test('--run adds the rules, bots, timeouts and a heredoc of agent arguments', ()
 test('without --run the agent settings are not computed, so a bad gate cannot break a digest', () => {
   const config = loadConfig(tempRoot());
   config.gates = [{ run: 'echo "x"' }];
-  assert.equal(envLines(config).length, 3);
+  assert.equal(envLines(config).length, 4);
   assert.throws(() => envLines(config, { run: true }), /cannot hold safely/);
 });
 
