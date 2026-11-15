@@ -4,7 +4,22 @@ The factory has been proven on one repo, a Node/npm monorepo that was converted 
 
 ## Paste this into the new session
 
-> Read `C:\Users\josha\software-factory\docs\proof-repo-python.md` and do its checklist, in order, in a new empty directory. Stop at the line that says STOP. Do not run `init`, add any factory file, or add anything the "Do not" list forbids. Report the repo URL and the output of each check.
+> Read `C:\Users\josha\software-factory\docs\proof-repo-python.md`, including its "Context for the agent" section, and do its checklist, in order, in a new empty directory. Stop at the line that says STOP. Do not run `init`, add any factory file, or add anything the "Do not" list forbids. Keep the log at `C:\Users\josha\proof-5-1-log.md` as that section says. Report the repo URL, the output of each check, and the log entries you added.
+
+## Context for the agent
+
+You are building the **skeleton** of a small Python web app, a weekly time-allocation planner with habit tracking, for its owner's own use. That is the visible job. It is also the first half of a test of a tool the owner is building, **software-factory** (`https://github.com/jatwell93/software-factory`, checked out at `C:\Users\josha\software-factory`): a way to plan a change with Claude, have GitHub Actions build it task by task as pull requests, and have the owner only review and merge. The factory has been proven on one Node monorepo. This new repo is its **second-repo proof** (task 5.1 of the `extract-software-factory` change in `date-management-app`): can someone set a fresh, different-stack repo up with a few commands and have the factory build real changes in it?
+
+A second session, with the factory's context, will run the next steps on this repo while you are, or after you are, done: `init`, `doctor`, creating a change, and watching one run to a merged PR. Your skeleton is its starting point. For the test to mean anything, the skeleton must be exactly what this checklist says and nothing more, and anything that goes wrong must be recorded rather than quietly worked around.
+
+How to behave:
+
+- **Follow the checklist literally.** Do not substitute a different stack, layout, library or tool, add features, or "improve" a file. If something in it cannot work as written, make the smallest change that lets you continue and log it as `checklist-error`.
+- **Keep the log.** `C:\Users\josha\proof-5-1-log.md` is shared with the factory session. Read its rules first. Append an entry for every failure, warning, wrong or stale instruction, version difference and guess, with the exact error text. Do not rewrite earlier entries.
+- **Do not touch the factory.** Do not edit `C:\Users\josha\software-factory` or `date-management-app`, and do not fix a factory problem if you see one: log it as `factory-bug` or `factory-gap` and tell the owner.
+- **Do not go past STOP.** No `init`, no factory files, no ruleset, secret or label, no bots, no deploy.
+- **Report, do not assume.** If a gate fails or CI is red, say so with the output. A green base matters more than finishing fast.
+- The owner merges; you never push to a default branch of anything but this new repo's first commit, as the checklist says.
 
 ## Why these choices
 
