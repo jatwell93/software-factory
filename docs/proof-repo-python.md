@@ -19,7 +19,7 @@ How to behave:
 - **Do not touch the factory.** Do not edit `C:\Users\josha\software-factory` or `date-management-app`, and do not fix a factory problem if you see one: log it as `factory-bug` or `factory-gap` and tell the owner.
 - **Do not go past STOP.** No `init`, no factory files, no ruleset, secret or label, no bots, no deploy.
 - **Report, do not assume.** If a gate fails or CI is red, say so with the output. A green base matters more than finishing fast.
-- The owner merges; you never push to a default branch of anything but this new repo's first commit, as the checklist says.
+- **Pushes.** Until STOP, the new repo has no ruleset, no hooks and no pull-request flow, so you push the skeleton, and any small fix that makes its CI green, straight to that repo's `main` (conventional commit messages, one logical change per commit, each fix logged). You never push to any other repository, and after STOP nothing is pushed by this session at all: the owner merges everything else.
 
 ## Why these choices
 
@@ -242,7 +242,7 @@ git commit -m "chore: project skeleton with lint, type and test gates"
 gh repo create time-planner --private --source . --remote origin --push
 ```
 
-Wait for the `CI` workflow on `main` to go green (`gh run watch` or the Actions tab). If it fails, fix it before going on: the factory needs a green base.
+Wait for the `CI` workflow on `main` to go green (`gh run watch` or the Actions tab). If it fails, fix it before going on, with a small follow-up commit pushed straight to `main` (there is no protection or PR flow yet) and a log entry for what was wrong: the factory needs a green base.
 
 ### STOP
 
