@@ -159,6 +159,11 @@ test("the relay dispatches the factory and guard workflows the caller names, def
   const text = fs.readFileSync(path.join(WORKFLOWS, 'factory-ci-relay.yml'), 'utf8');
   assert.match(text, /--ref "\$DEFAULT_BRANCH"/);
   assert.doesNotMatch(text, /--ref main|actions\/checkout/);
+  // Without --ref, gh asks GraphQL for the default branch, which a private repo refuses a
+  // token that lacks contents: read: every dispatch must name the ref.
+  const dispatches = text.split('\n').filter((line) => line.trim().startsWith('gh workflow run'));
+  assert.equal(dispatches.length, 2);
+  for (const line of dispatches) assert.match(line, /--ref "\$DEFAULT_BRANCH"/, line);
 });
 
 test('the relay caller watches exactly the config ci_workflows, quoting each name', () => {
@@ -231,6 +236,7 @@ test('each reusable workflow declares exactly the permissions it needs', () => {
     'reviews-settled.yml': {
       contents: 'read',
       'pull-requests': 'read',
+      actions: 'read',
       checks: 'read',
       statuses: 'write',
     },
