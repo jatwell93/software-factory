@@ -56,7 +56,7 @@ jobs:
             echo "PR #$PR is not a factory PR (author $author); nothing to relay"
             exit 0
           fi
-          gh workflow run "$FACTORY_WORKFLOW" --repo "$REPO" -f pr="$PR"
+          gh workflow run "$FACTORY_WORKFLOW" --repo "$REPO" --ref "$DEFAULT_BRANCH" -f pr="$PR"
 
       # pull_request_target does not always fire on a push, and then the
       # required factory/no-go-guard status never arrives. CI has finished by

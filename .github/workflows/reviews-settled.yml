@@ -32,6 +32,7 @@ on:
 permissions:
   contents: read
   pull-requests: read
+  actions: read # gh pr checks reads each check's workflow run, which a private repo withholds without it
   checks: read
   statuses: write
 
