@@ -288,6 +288,14 @@ function createOpenSpecAdapter({
   return {
     name: NAME,
 
+    // The CLI the agent runs to validate and archive a change. A project that pins it
+    // keeps its own; the runner installs this one, exact-pinned and without install
+    // scripts, for a project that has none (a Python project has no package.json).
+    cli: {
+      bin: 'openspec',
+      install: ['npm', 'install', '--global', '--ignore-scripts', '@fission-ai/openspec@1.13.2'],
+    },
+
     listChanges() {
       return src
         .list(CHANGES)
