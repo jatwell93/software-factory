@@ -304,11 +304,13 @@ jobs:
           INSTALL: ${{ needs.route.outputs.install }}
         run: bash -c "$INSTALL"
 
+      # Only an archive run uses it, so a registry outage cannot fail a task or babysit run.
       # The archive step of run-spec runs the spec source's command-line tool. A project
       # that provides it keeps its own; any other project (a Python one has no
       # package.json) gets the adapter's pinned version. Not part of the install above:
       # that is the owner's command, and the pin is the factory's.
       - name: Install the spec source's CLI when the project has none
+        if: needs.route.outputs.mode == 'archive'
         shell: bash
         run: node "$FACTORY_DIR/scripts/factory-install-spec-cli.js"
 

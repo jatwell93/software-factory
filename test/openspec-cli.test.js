@@ -44,6 +44,11 @@ test('the run job calls the script after the project install, before Claude runs
   assert.equal(STEPS[at].run, 'node "$FACTORY_DIR/scripts/factory-install-spec-cli.js"');
 });
 
+test('only an archive run installs the CLI: no other mode can fail on a registry outage', () => {
+  const step = STEPS.find((s) => s.name === NAME);
+  assert.equal(step.if, "needs.route.outputs.mode == 'archive'");
+});
+
 test('the OpenSpec adapter pins its CLI exactly and skips install scripts', () => {
   const { cli } = createOpenSpecAdapter({ root: ROOT, maxIdLength: 40 });
   assert.equal(cli.bin, 'openspec');
