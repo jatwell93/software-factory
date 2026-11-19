@@ -331,6 +331,23 @@ test('outside a git checkout the hooks are skipped with a warning', () => {
   assert.ok(result.warnings.some((w) => /not a git checkout/.test(w)));
 });
 
+test('an unrelated warning does not hide why the hooks were skipped', () => {
+  const { root, git: realGit } = project();
+  runInit({ root, ref: REF, labels: false }, fakeIo(realGit)); // writes the config
+  fs.rmSync(path.join(root, '.git'), { recursive: true, force: true });
+  fs.rmSync(path.join(root, '.githooks'), { recursive: true, force: true });
+  const git = () => {
+    throw new Error('not a git repository');
+  };
+  // The config exists, so --review-bot warns; there is no checkout, so the hooks skip.
+  const result = runInit(
+    { root, ref: REF, owner: 'octo', labels: false, reviewBots: ['cursor'] },
+    fakeIo(git),
+  );
+  assert.ok(result.warnings.some((w) => /--review-bot ignored/.test(w)));
+  assert.ok(result.warnings.some((w) => /not a git checkout/.test(w)));
+});
+
 test('parseArgs reads values, repeated lists and switches', () => {
   assert.deepEqual(
     parseArgs([
@@ -342,11 +359,44 @@ test('parseArgs reads values, repeated lists and switches', () => {
       'b',
       '--ci-workflow',
       'CI',
+      '--review-bot',
+      'cursor',
       '--force',
       '--no-labels',
     ]),
-    { gates: ['a', 'b'], ciWorkflows: ['CI'], ref: 'abc', force: true, labels: false },
+    {
+      gates: ['a', 'b'],
+      ciWorkflows: ['CI'],
+      reviewBots: ['cursor'],
+      ref: 'abc',
+      force: true,
+      labels: false,
+    },
   );
+});
+
+test('--review-bot writes review_bots: normalised, deduplicated, and a bad login is refused', () => {
+  const { root, git } = project();
+  runInit(
+    { root, ref: REF, labels: false, reviewBots: ['Cursor', 'sentry[bot]', 'cursor'] },
+    fakeIo(git),
+  );
+  assert.deepEqual(loadConfig(root).review_bots, ['cursor', 'sentry']);
+
+  const other = project();
+  assert.throws(
+    () => runInit({ root: other.root, ref: REF, reviewBots: ['Bad Bot!'] }, fakeIo(other.git)),
+    /--review-bot Bad Bot!/,
+  );
+  assert.equal(fs.existsSync(path.join(other.root, 'factory.config.yml')), false, 'wrote nothing');
+});
+
+test('--review-bot on a project that has a config warns and changes nothing', () => {
+  const { root, git } = project();
+  runInit({ root, ref: REF, labels: false }, fakeIo(git));
+  const result = runInit({ root, ref: REF, labels: false, reviewBots: ['cursor'] }, fakeIo(git));
+  assert.ok(result.warnings.some((w) => /--review-bot ignored/.test(w)));
+  assert.deepEqual(loadConfig(root).review_bots, []);
 });
 
 test('parseArgs rejects an unknown flag and a flag with no value', () => {
