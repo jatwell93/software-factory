@@ -8,7 +8,6 @@ description: >-
   "break this change into tickets", "slice the tasks", or has just written a
   proposal that the factory should build. Do NOT use for a change that fits one
   run (write a one-task tasks.md instead), or for work outside a spec change.
-disable-model-invocation: true
 ---
 
 # To tickets

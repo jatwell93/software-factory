@@ -51,6 +51,20 @@ Do not tick **Require a pull request before merging** for this: you cannot appro
 
 **Settings > Actions > General** sets whether workflow runs started by a bot wait for you. Under the default policy a later push by `github-actions[bot]` to a factory pull request can run as `action_required` until you click **Approve and run workflows**. The factory does not depend on the setting; decide it after you have seen whether your repository shows the prompt (a private repository may not).
 
+On a private repository the first factory push needs that click: GitHub holds the run until you approve it, and the factory cannot approve it for you. Open the pull request's **Checks** tab and click **Approve and run workflows**.
+
+## Owner tasks that edit a protected path
+
+A task marked `(owner)` that edits a protected path (the factory's baseline, your `protected_paths`, or the change's `no_go`) cannot ride on the factory's pull request. `factory/no-go-guard` treats any pull request from `claude[bot]` or with a `factory:*` label as a factory pull request and has no exemption for the owner, by design: a label is editable, so the guard cannot tell your edit from an agent's.
+
+Do the edit on its own pull request:
+
+1. Branch from `main` (not from the factory branch) and make the edit, for example adding a bot to `review_bots` in `factory.config.yml`. Do not add a `factory:*` label.
+2. Merge that pull request. Wait for the guard and your CI to pass first.
+3. Tick the task in the change's `tasks.md` on the factory's pull request (or on `main` before it continues), then remove `needs-human` from the issue so the factory resumes. Update the factory branch from `main` if the edit affects its checks.
+
+Do not make the edit on the factory branch: the guard fails and, if you then push a revert, its status may stay stale (close and reopen the pull request to re-run it).
+
 ## FACTORY_DIR
 
 To run the factory's scripts and skills from your own machine (`factory-new-change.js`, `pr-feedback.js`, `cleanup-merged.js`, `factory-doctor.js`, `factory-upgrade.js`), set the environment variable `FACTORY_DIR` to a checkout of <https://github.com/jatwell93/software-factory>, then call `node "$FACTORY_DIR/scripts/<name>.js"`.
