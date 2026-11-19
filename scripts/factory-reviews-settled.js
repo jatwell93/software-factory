@@ -17,7 +17,7 @@ const { runCli } = require('../lib/cli.js');
 const { loadConfig } = require('../lib/config.js');
 const { CONTEXT, OWN_CHECKS, settledStatus } = require('../lib/reviews-settled.js');
 const { createRouter, authorOf, isAppAuthor } = require('../lib/router.js');
-const { FACTORY_WORKFLOW } = require('../lib/workflow.js');
+const { FACTORY_WORKFLOW, REQUIRED_STATUSES } = require('../lib/workflow.js');
 const { ghReason } = require('../lib/gh-error.js');
 
 const defaultGh = (args) => execFileSync('gh', args, { encoding: 'utf8' });
@@ -39,10 +39,37 @@ function factoryPrs(gh, changeFromLabels, only) {
   );
 }
 
+/** Every status on a commit, newest first. */
+function statusesOf(gh, sha) {
+  return JSON.parse(gh(['api', `repos/{owner}/{repo}/commits/${sha}/statuses?per_page=100`]));
+}
+
 /** The newest status of this context on a commit: { state, description } or null. */
-function currentStatus(gh, sha) {
-  const rows = JSON.parse(gh(['api', `repos/{owner}/{repo}/commits/${sha}/statuses?per_page=100`]));
+function currentStatus(rows) {
   return rows.find((row) => row.context === CONTEXT) || null;
+}
+
+/** How long a head may go without a required status before the run dispatches for it. */
+const MISSING_STATUS_GRACE_MINUTES = 10;
+
+/**
+ * Dispatch the caller workflow for each required status a head still lacks. The event
+ * that should have posted it normally does so within a minute; GitHub sometimes starts
+ * no run for a push, and then the PR cannot be merged and nothing else retries. A
+ * dispatch reads the PR from the API and posts nothing if the head moved. A failed
+ * dispatch only warns: the next run (every 15 minutes) tries again.
+ */
+function recoverStatuses(gh, config, pr, report, rows, now, log) {
+  if (now - Date.parse(report.lastPushAt) < MISSING_STATUS_GRACE_MINUTES * 60000) return;
+  for (const { context, workflow } of REQUIRED_STATUSES) {
+    if (rows.some((row) => row.context === context)) continue;
+    try {
+      gh(['workflow', 'run', workflow, '--ref', config.default_branch, '-f', `pr=${pr}`]);
+      log(`#${pr}: no ${context} status on the head; dispatched ${workflow}`);
+    } catch (error) {
+      log(`::warning::#${pr}: could not dispatch ${workflow}: ${ghReason(error)}`);
+    }
+  }
 }
 
 function publish(gh, sha, status) {
@@ -96,7 +123,9 @@ function main(argv = process.argv.slice(2), io = {}) {
       now,
     });
     if (!status) continue;
-    const current = currentStatus(gh, report.head);
+    const rows = statusesOf(gh, report.head);
+    recoverStatuses(gh, config, pr.number, report, rows, now, log);
+    const current = currentStatus(rows);
     if (current && current.state === status.state && current.description === status.description) {
       log(`#${pr.number}: ${status.state} (unchanged)`);
       continue;
