@@ -52,7 +52,7 @@ node "$FACTORY_DIR/scripts/factory-doctor.js"
 
 Each line reads `ok`, `warn`, `FAIL` or `skip`, and each gap prints the command that fixes it. `skip` for the Claude GitHub App is normal: a script cannot see installations. Carry on when nothing says `FAIL`.
 
-If you use a review bot (Copilot, CodeScene, Cursor Bugbot, CodeRabbit, Sentry), list its login under `review_bots` now. See [review bots](owner-setup.md#review-bots).
+If you use a review bot (Copilot, CodeScene, Cursor Bugbot, CodeRabbit, Sentry), list its login under `review_bots` now (or pass `--review-bot <login>` to `init`). Any bot or person can comment either way; the list only sets what the pull request waits for. See [review bots](owner-setup.md#review-bots).
 
 ## 4. Plan a first change
 

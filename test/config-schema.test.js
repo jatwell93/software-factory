@@ -70,10 +70,20 @@ test('accepts another spec source name without knowing the adapter', () => {
   assert.deepEqual(problems(withChange({ spec_source: 'my-bespoke-flow' })), []);
 });
 
+// Absent means something no value can: `allowed_bots` left out allows every bot, and an
+// empty list is refused (it would allow none and stall every review).
+const ABSENT_MEANS_UNSET = new Set(['allowed_bots']);
+
 test('every optional key has a default in the schema', () => {
   const required = new Set(schema.required);
   const noDefault = Object.entries(schema.properties)
-    .filter(([key, def]) => !required.has(key) && def.type !== 'object' && !('default' in def))
+    .filter(
+      ([key, def]) =>
+        !required.has(key) &&
+        !ABSENT_MEANS_UNSET.has(key) &&
+        def.type !== 'object' &&
+        !('default' in def),
+    )
     .map(([key]) => key);
   assert.deepEqual(noDefault, []);
 });

@@ -7,7 +7,8 @@
  *
  * Usage:
  *   node factory-init.js [--ref <sha|v*>] [--owner <login>] [--default-branch <name>]
- *     [--gate <cmd>]... [--ci-workflow <name>]... [--spec-source <name>]
+ *     [--gate <cmd>]... [--ci-workflow <name>]... [--review-bot <login>]...
+ *     [--spec-source <name>]
  *     [--force] [--adopt-hooks] [--dry-run] [--no-labels] [--no-adapter-setup]
  *
  * --ref defaults to the commit this factory checkout is on: it must be pushed, as
@@ -26,7 +27,11 @@ const VALUE_FLAGS = {
   '--default-branch': 'defaultBranch',
   '--spec-source': 'specSource',
 };
-const LIST_FLAGS = { '--gate': 'gates', '--ci-workflow': 'ciWorkflows' };
+const LIST_FLAGS = {
+  '--gate': 'gates',
+  '--ci-workflow': 'ciWorkflows',
+  '--review-bot': 'reviewBots',
+};
 const SWITCHES = {
   '--force': ['force', true],
   '--adopt-hooks': ['adoptHooks', true],
@@ -36,7 +41,7 @@ const SWITCHES = {
 };
 
 function parseArgs(argv) {
-  const options = { gates: [], ciWorkflows: [] };
+  const options = { gates: [], ciWorkflows: [], reviewBots: [] };
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i];
     if (SWITCHES[flag]) {

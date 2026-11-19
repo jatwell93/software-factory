@@ -64,6 +64,13 @@
       "uniqueItems": true,
       "default": []
     },
+    "allowed_bots": {
+      "description": "Optional. Logins, without the [bot] suffix, of the only bots whose reviews may start a babysit pass (the factory's own two actors are always allowed). Leave it out to allow every bot, which is the default: the agent action refuses a bot that is not allowed, and a refused run fails and queues a retry, so a bot missing from a list stalls the change until the hourly retry. Set it only if you want that trade.",
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+      "minItems": 1,
+      "uniqueItems": true
+    },
     "reviews_timeout_minutes": {
       "description": "How long after the last push factory/reviews-settled waits for a configured bot before it turns to success.",
       "type": "integer",

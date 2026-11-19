@@ -75,6 +75,39 @@ Two things to check for each bot:
 
 `doctor` does not check the bot logins: a wrong login means a wait until the timeout and nothing worse.
 
+### Choosing bots at `init`
+
+Pass each bot you want the factory to wait for with `--review-bot` (repeat it; any login works, so this is also the write-in). `init` lowercases it, drops a `[bot]` suffix and writes `review_bots`:
+
+```
+node "$FACTORY_DIR/scripts/factory-init.js" --review-bot copilot-pull-request-reviewer --review-bot cursor
+```
+
+`init` never overwrites an existing `factory.config.yml`: on a project that has one, `--review-bot` is ignored with a warning, and you edit `review_bots` by hand as above.
+
+Logins seen on real pull requests or in the vendor's documentation (confirm yours with the `gh api` command above before relying on one):
+
+| Bot                   | Login                           | Source                                                                                                 |
+| --------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| GitHub Copilot review | `copilot-pull-request-reviewer` | reviews on real pull requests                                                                          |
+| CodeScene             | `codescene-delta-analysis`      | reviews on real pull requests                                                                          |
+| Sentry (Seer)         | `sentry`                        | review on a real pull request; it reports mostly through a check, so see "posts when it finds nothing" |
+| Cursor Bugbot         | `cursor`                        | Cursor's forum: the app's actions show as `cursor[bot]`                                                |
+
+For CodeRabbit, Gemini Code Assist and others, read the login from a pull request they have reviewed. Bugbot decides whether to review from the Cursor account linked to the pull request's author, and factory pull requests are authored by `claude[bot]`, so check that it reviews the first one before you list it.
+
+### Restricting who may start a run
+
+By default any bot may start a babysit pass. To allow only named bots, set `allowed_bots` in `factory.config.yml` (logins as in `review_bots`; the factory's own two actors stay allowed):
+
+```yaml
+allowed_bots:
+  - copilot-pull-request-reviewer
+  - cursor
+```
+
+A bot outside the list then fails its run (the agent action refuses it) and queues a `factory-retry`, so a change stalls until the hourly retry. Set it only if you prefer that to a bot you did not name starting a pass. An empty list is refused.
+
 ## Owner tasks that edit a protected path
 
 A task marked `(owner)` that edits a protected path (the factory's baseline, your `protected_paths`, or the change's `no_go`) cannot ride on the factory's pull request. `factory/no-go-guard` treats any pull request from `claude[bot]` or with a `factory:*` label as a factory pull request and has no exemption for the owner, by design: a label is editable, so the guard cannot tell your edit from an agent's.

@@ -90,6 +90,16 @@ test('every bot may start a run, listed in review_bots or not', () => {
   assert.equal(allowedBots(configWith('review_bots:', '  - sentry')), '*');
 });
 
+test("allowed_bots pins the list, adds the [bot] suffix and keeps the factory's own actors", () => {
+  assert.equal(
+    allowedBots(configWith('allowed_bots:', '  - sentry', '  - claude')),
+    'sentry[bot],claude[bot],github-actions[bot]',
+    'no duplicate',
+  );
+  assert.throws(() => configWith('allowed_bots: []'), /allowed_bots/);
+  assert.throws(() => configWith('allowed_bots:', '  - sentry[bot]'), /allowed_bots/);
+});
+
 test('prefixesOf gives a prefix to every line of a multi-line gate, and to each side of a pipe', () => {
   assert.deepEqual(prefixesOf('npm run lint\nnpm test\r\nmake check'), [
     'npm run',
