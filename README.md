@@ -2,6 +2,8 @@
 
 Plan a change with an agent, then let it build the change task by task as pull requests you only merge. Built on GitHub Actions and Claude Code.
 
+**Start with [docs/quickstart.md](docs/quickstart.md)** (install, `init`, first change). [docs/factory-guide.md](docs/factory-guide.md) explains the flow; [docs/owner-setup.md](docs/owner-setup.md) has the steps only the owner can do.
+
 **Status: being extracted from a working setup.** The workflows, scripts and skills are not here yet. What exists so far is the contract the rest is built to:
 
 - `schema/factory.config.schema.json`: every setting a project makes in its `factory.config.yml`.

@@ -344,7 +344,8 @@ jobs:
           CLAUDE_CODE_RETRY_WATCHDOG_MAX_WAIT_MS: '600000'
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          # Review events come from these bots; the action refuses other bot actors.
+          # Any bot may start a babysit pass: the action refuses a bot actor that is
+          # not allowed, and a refused run fails and queues a retry.
           allowed_bots: ${{ needs.route.outputs.allowed_bots }}
           # change_id and pr come from the route job, which accepts only a plain
           # change id and a PR number.

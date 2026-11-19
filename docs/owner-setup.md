@@ -53,6 +53,28 @@ Do not tick **Require a pull request before merging** for this: you cannot appro
 
 On a private repository the first factory push needs that click: GitHub holds the run until you approve it, and the factory cannot approve it for you. Open the pull request's **Checks** tab and click **Approve and run workflows**.
 
+## Review bots
+
+Any reviewer can comment on a factory pull request: a bot you listed, a bot you did not, or a person. Every review or comment starts a babysit pass, which reads the unresolved threads, judges each one, fixes it or replies and closes it. The factory has no per-bot behaviour, and no bot name can halt a run.
+
+`review_bots` in `factory.config.yml` has one job: it lists the bots `factory/reviews-settled` waits for before the factory marks the pull request ready. It is optional: with none, the factory waits only for CI and the quiet window. For each bot listed, `factory/reviews-settled` stays pending until the bot has posted on the pull request, or `reviews_timeout_minutes` (30 by default) have passed since the last push.
+
+Switching bots is a config edit and nothing else: no workflow, secret or ruleset change.
+
+To switch, say from Sentry to Cursor Bugbot or CodeRabbit:
+
+1. Install the new bot on the repository and open a pull request it has reviewed.
+2. Read its login: `gh api repos/OWNER/REPO/pulls/N/reviews --jq '.[].user.login'` and the same for `issues/N/comments`. Drop the `[bot]` suffix and use lowercase. The login is often not the product name (Copilot's is `copilot-pull-request-reviewer`, Sentry's `sentry`).
+3. Replace the old login with the new one in `review_bots`, on [its own pull request](#owner-tasks-that-edit-a-protected-path) (`factory.config.yml` is protected). Keep the old one while its subscription runs if you want the factory to keep waiting for it.
+4. If the old bot's checks were required by your ruleset, remove them there; if you want the new bot's check to gate merges, add it (the picker lists a check only after it has run once).
+
+Two things to check for each bot:
+
+- **Does it post when it finds nothing?** The factory counts a bot as having posted only when it leaves a review, a comment or a thread. A bot that reports only through a check run, or comments only when it finds a problem, never counts, so every pull request waits the full timeout. Leave such a bot out of `review_bots`: when it does comment, its findings still start a babysit pass, it just cannot hold the status. Or lower `reviews_timeout_minutes`.
+- **Does it comment on every push?** A bot that reviews only the first push of a pull request leaves a later push waiting for a review that will not come. Same remedy.
+
+`doctor` does not check the bot logins: a wrong login means a wait until the timeout and nothing worse.
+
 ## Owner tasks that edit a protected path
 
 A task marked `(owner)` that edits a protected path (the factory's baseline, your `protected_paths`, or the change's `no_go`) cannot ride on the factory's pull request. `factory/no-go-guard` treats any pull request from `claude[bot]` or with a `factory:*` label as a factory pull request and has no exemption for the owner, by design: a label is editable, so the guard cannot tell your edit from an agent's.
