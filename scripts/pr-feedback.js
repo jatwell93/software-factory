@@ -18,8 +18,15 @@
  * Usage:
  *   node pr-feedback.js <pr> [--quiet-minutes N]   # JSON report
  *   node pr-feedback.js <pr> --summary              # one-line report
+ *   node pr-feedback.js checks <pr>                 # the CI checks as JSON (see below)
  *   node pr-feedback.js reply <threadId> <body>     # reply in a thread
  *   node pr-feedback.js resolve <threadId>          # resolve a thread
+ *
+ * CI state: the Claude action runs the agent with the Claude GitHub App's
+ * token, which can lack checks and statuses read on a private repo ("Resource
+ * not accessible by integration"). The workflow saves `checks <pr>` to a file
+ * with its own token before the agent starts and sets FACTORY_CHECKS_FILE; when
+ * that file holds a JSON array the report reads it instead of `gh pr checks`.
  *
  * The report's `settled` flag is true when every check has finished and no
  * feedback or commit is newer than the quiet window (default 10 minutes).
@@ -31,6 +38,7 @@
  */
 
 const { execFileSync } = require('node:child_process');
+const fs = require('node:fs');
 const { ConfigError, loadConfig } = require('../lib/config.js');
 const { OWN_CHECKS } = require('../lib/reviews-settled.js');
 
@@ -344,7 +352,20 @@ const NO_CHECKS_YET = [
   { name: '(no checks reported yet)', bucket: 'pending', workflow: NO_CHECKS_WORKFLOW },
 ];
 
-function fetchChecks(gh, number) {
+function fetchChecks(gh, number, { env = process.env, readFile = fs.readFileSync } = {}) {
+  const file = env.FACTORY_CHECKS_FILE;
+  if (file) {
+    try {
+      const saved = JSON.parse(readFile(file, 'utf8'));
+      if (Array.isArray(saved)) return saved;
+    } catch {
+      // No usable snapshot: ask GitHub.
+    }
+  }
+  return liveChecks(gh, number);
+}
+
+function liveChecks(gh, number) {
   try {
     return JSON.parse(
       gh(['pr', 'checks', String(number), '--json', 'name,bucket,workflow,startedAt,completedAt']),
@@ -404,7 +425,7 @@ function parseIgnoreChecks(args) {
 
 function usage() {
   process.stderr.write(
-    'usage: pr-feedback.js <pr> [--quiet-minutes N] [--ignore-check NAME]... [--summary] | reply <threadId> <body> | resolve <threadId>\n',
+    'usage: pr-feedback.js <pr> [--quiet-minutes N] [--ignore-check NAME]... [--summary] | checks <pr> | reply <threadId> <body> | resolve <threadId>\n',
   );
   return 2;
 }
@@ -424,6 +445,10 @@ function main(argv, { gh = defaultGh, out = process.stdout, root = process.cwd()
   const [cmd, ...rest] = argv;
   if (cmd === 'reply' && rest.length >= 2) {
     reply(rest[0], rest.slice(1).join(' '), { gh });
+    return 0;
+  }
+  if (cmd === 'checks' && /^\d+$/.test(rest[0] || '')) {
+    out.write(`${JSON.stringify(liveChecks(gh, rest[0]))}\n`);
     return 0;
   }
   if (cmd === 'resolve' && rest.length === 1) {
@@ -453,6 +478,7 @@ module.exports = {
   summarizeChecks,
   formatSummary,
   fetchReport,
+  fetchChecks,
   reply,
   resolve,
   main,
