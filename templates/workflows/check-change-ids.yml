@@ -8,6 +8,11 @@ name: Change ids
 on:
   pull_request_target:
     types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: 'PR number whose head has no factory/change-ids status'
+        required: true
 
 permissions:
   contents: read
@@ -15,7 +20,7 @@ permissions:
   statuses: write
 
 concurrency:
-  group: change-ids-${{ github.event.pull_request.number }}
+  group: change-ids-${{ github.event.pull_request.number || inputs.pr }}
   cancel-in-progress: true
 
 jobs:
@@ -23,3 +28,4 @@ jobs:
     uses: jatwell93/software-factory/.github/workflows/check-change-ids.yml@__FACTORY_REF__
     with:
       factory_ref: __FACTORY_REF__
+      pr: ${{ inputs.pr }}

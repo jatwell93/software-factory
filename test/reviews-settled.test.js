@@ -118,13 +118,13 @@ function fakeGh({ prs = [], statuses = [] } = {}) {
   return { gh, calls };
 }
 const posts = (calls) => calls.filter((c) => c[0] === 'api' && c.includes('-f'));
-const run = (argv, { cfg = configWith(), gh, rep = report() }) => {
+const run = (argv, { cfg = configWith(), gh, rep = report(), now = at(5) }) => {
   const lines = [];
   const status = main(argv, {
     config: cfg,
     gh,
     feedback: () => rep,
-    now: at(5),
+    now,
     log: (l) => lines.push(l),
     error: () => {},
   });
@@ -167,6 +167,89 @@ test('the script posts the status on the head of each open factory PR only', () 
 // reviews just settled asks the factory itself.
 
 const dispatches = (calls) => calls.filter((c) => c[0] === 'workflow');
+
+// Recovery: GitHub sometimes starts no pull_request_target run for a push, and the PR
+// then waits on a required status nothing will post.
+
+const GUARD = { context: 'factory/no-go-guard', state: 'success', description: 'ok' };
+const IDS = { context: 'factory/change-ids', state: 'success', description: 'ok' };
+const recovered = (calls) => dispatches(calls).filter((c) => c[2] !== 'factory.yml');
+
+test('a head with neither required status gets both callers dispatched with the PR number', () => {
+  const { gh, calls } = fakeGh({ prs: [factoryPr(9)] });
+  const { lines } = run([], { gh, now: at(10) });
+  assert.deepEqual(recovered(calls), [
+    ['workflow', 'run', 'no-go-guard.yml', '--ref', 'main', '-f', 'pr=9'],
+    ['workflow', 'run', 'check-change-ids.yml', '--ref', 'main', '-f', 'pr=9'],
+  ]);
+  assert.ok(
+    lines.includes('#9: no factory/no-go-guard status on the head; dispatched no-go-guard.yml'),
+  );
+});
+
+test('only the missing status is dispatched', () => {
+  const only = fakeGh({ prs: [factoryPr(9)], statuses: [GUARD] });
+  run([], { gh: only.gh, now: at(10) });
+  assert.deepEqual(
+    recovered(only.calls).map((c) => c[2]),
+    ['check-change-ids.yml'],
+  );
+  const both = fakeGh({ prs: [factoryPr(9)], statuses: [GUARD, IDS] });
+  run([], { gh: both.gh, now: at(10) });
+  assert.deepEqual(recovered(both.calls), []);
+});
+
+test('a head pushed less than ten minutes ago is left to the events that normally post', () => {
+  const young = fakeGh({ prs: [factoryPr(9)] });
+  run([], { gh: young.gh, now: at(9.99) });
+  assert.deepEqual(recovered(young.calls), []);
+  const old = fakeGh({ prs: [factoryPr(9)] });
+  run([], { gh: old.gh, now: at(10) });
+  assert.equal(recovered(old.calls).length, 2);
+});
+
+test('recovery runs even when the reviews-settled status is unchanged, and uses the default branch', () => {
+  const same = [
+    { context: CONTEXT, state: 'success', description: 'Quiet window over; no review bots set' },
+  ];
+  const { gh, calls } = fakeGh({ prs: [factoryPr(9)], statuses: same });
+  run([], { cfg: configWith('default_branch: trunk'), gh, now: at(30) });
+  assert.equal(posts(calls).length, 0);
+  assert.equal(recovered(calls).length, 2);
+  assert.ok(recovered(calls).every((c) => c.includes('trunk')));
+});
+
+test('a closed PR and a non-factory PR are not recovered', () => {
+  const closed = fakeGh({ prs: [factoryPr(9)] });
+  run([], { gh: closed.gh, rep: report({ state: 'CLOSED' }), now: at(30) });
+  assert.deepEqual(recovered(closed.calls), []);
+  const owner = { number: 3, state: 'OPEN', labels: LABELS, author: { login: 'jatwell93' } };
+  const other = fakeGh({ prs: [owner] });
+  run([], { gh: other.gh, now: at(30) });
+  assert.deepEqual(dispatches(other.calls), []);
+});
+
+test('a failed recovery dispatch warns and the other one and the status still go ahead', () => {
+  const inner = fakeGh({ prs: [factoryPr(9)] });
+  const gh = (args) => {
+    if (args[0] === 'workflow' && args[2] === 'no-go-guard.yml') {
+      throw Object.assign(new Error('x'), { stderr: 'HTTP 422: no workflow_dispatch\nmore' });
+    }
+    return inner.gh(args);
+  };
+  const { status, lines } = run([], { gh, now: at(10) });
+  assert.equal(status, 0);
+  assert.ok(
+    lines.includes(
+      '::warning::#9: could not dispatch no-go-guard.yml: HTTP 422: no workflow_dispatch',
+    ),
+  );
+  assert.deepEqual(
+    recovered(inner.calls).map((c) => c[2]),
+    ['check-change-ids.yml'],
+  );
+  assert.equal(posts(inner.calls).length, 1, 'the settled status is posted');
+});
 
 test('a PR that just settled asks the factory for a pass on the default branch', () => {
   const { gh, calls } = fakeGh({ prs: [factoryPr(9)] });
