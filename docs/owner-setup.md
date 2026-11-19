@@ -55,13 +55,11 @@ On a private repository the first factory push needs that click: GitHub holds th
 
 ## Review bots
 
-`review_bots` in `factory.config.yml` lists the review bots the factory waits for. It is optional: with none, the factory waits only for CI and the quiet window. For each bot listed, three things happen:
+Any reviewer can comment on a factory pull request: a bot you listed, a bot you did not, or a person. Every review or comment starts a babysit pass, which reads the unresolved threads, judges each one, fixes it or replies and closes it. The factory has no per-bot behaviour, and no bot name can halt a run.
 
-- The bot may start a factory run with its reviews (the login is added to the agent action's allowed bots).
-- `factory/reviews-settled` stays pending until the bot has posted on the pull request, or `reviews_timeout_minutes` (30 by default) have passed since the last push.
-- The babysit pass reads the bot's threads like any other review.
+`review_bots` in `factory.config.yml` has one job: it lists the bots `factory/reviews-settled` waits for before the factory marks the pull request ready. It is optional: with none, the factory waits only for CI and the quiet window. For each bot listed, `factory/reviews-settled` stays pending until the bot has posted on the pull request, or `reviews_timeout_minutes` (30 by default) have passed since the last push.
 
-The factory has no per-bot behaviour. Every review author is treated alike, so switching bots is a config edit and nothing else: no workflow, secret or ruleset change.
+Switching bots is a config edit and nothing else: no workflow, secret or ruleset change.
 
 To switch, say from Sentry to Cursor Bugbot or CodeRabbit:
 
@@ -72,7 +70,7 @@ To switch, say from Sentry to Cursor Bugbot or CodeRabbit:
 
 Two things to check for each bot:
 
-- **Does it post when it finds nothing?** The factory counts a bot as having posted only when it leaves a review, a comment or a thread. A bot that reports only through a check run, or comments only when it finds a problem, never counts, so every pull request waits the full timeout. Leave such a bot out of `review_bots` (its findings still reach the babysit pass when it does comment; it just cannot hold the status), or lower `reviews_timeout_minutes`.
+- **Does it post when it finds nothing?** The factory counts a bot as having posted only when it leaves a review, a comment or a thread. A bot that reports only through a check run, or comments only when it finds a problem, never counts, so every pull request waits the full timeout. Leave such a bot out of `review_bots`: when it does comment, its findings still start a babysit pass, it just cannot hold the status. Or lower `reviews_timeout_minutes`.
 - **Does it comment on every push?** A bot that reviews only the first push of a pull request leaves a later push waiting for a review that will not come. Same remedy.
 
 `doctor` does not check the bot logins: a wrong login means a wait until the timeout and nothing worse.

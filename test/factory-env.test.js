@@ -63,7 +63,7 @@ test('--run adds the rules, bots, timeouts and a heredoc of agent arguments', ()
   );
   const lines = envLines(config, { run: true });
   assert.ok(lines.includes('rules=.claude AGENTS.md CLAUDE.md factory.config.yml'));
-  assert.ok(lines.includes('allowed_bots=sentry[bot],claude[bot],github-actions[bot]'));
+  assert.ok(lines.includes('allowed_bots=*'));
   assert.ok(lines.includes('step_timeout=30'));
   assert.ok(lines.includes('job_timeout=' + (30 + JOB_MARGIN_MINUTES)));
   const start = lines.findIndex((l) => l.startsWith('claude_args<<'));

@@ -85,17 +85,9 @@ test('claudeArgs carries the caps and both tool lists, one option per line', () 
   assert.equal(claudeArgs(configWith()).split('\n')[0], '--max-turns 200');
 });
 
-test("review bots get the [bot] suffix, and the factory's own actors are always allowed", () => {
-  assert.equal(allowedBots(configWith()), 'claude[bot],github-actions[bot]');
-  assert.equal(
-    allowedBots(configWith('review_bots:', '  - sentry', '  - copilot-pull-request-reviewer')),
-    'sentry[bot],copilot-pull-request-reviewer[bot],claude[bot],github-actions[bot]',
-  );
-  assert.equal(
-    allowedBots(configWith('review_bots:', '  - claude')),
-    'claude[bot],github-actions[bot]',
-    'no duplicate',
-  );
+test('every bot may start a run, listed in review_bots or not', () => {
+  assert.equal(allowedBots(configWith()), '*');
+  assert.equal(allowedBots(configWith('review_bots:', '  - sentry')), '*');
 });
 
 test('prefixesOf gives a prefix to every line of a multi-line gate, and to each side of a pipe', () => {
