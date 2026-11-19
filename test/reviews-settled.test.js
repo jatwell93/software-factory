@@ -157,7 +157,68 @@ test('the script posts the status on the head of each open factory PR only', () 
   assert.equal(post[1], 'repos/{owner}/{repo}/statuses/sha1');
   assert.ok(post.includes(`context=${CONTEXT}`) && post.includes('state=success'));
   assert.equal(posts(calls).length, 1);
-  assert.deepEqual(lines, ['#9: success (Quiet window over; all 1 review bot(s) have posted)']);
+  assert.deepEqual(lines, [
+    '#9: success (Quiet window over; all 1 review bot(s) have posted)',
+    '#9: asked the factory for a pass',
+  ]);
+});
+
+// The dispatch: the CI relay does not fire for a run the owner approved, so a PR whose
+// reviews just settled asks the factory itself.
+
+const dispatches = (calls) => calls.filter((c) => c[0] === 'workflow');
+
+test('a PR that just settled asks the factory for a pass on the default branch', () => {
+  const { gh, calls } = fakeGh({ prs: [factoryPr(9)] });
+  run([], { cfg: configWith('default_branch: trunk'), gh });
+  assert.deepEqual(dispatches(calls), [
+    ['workflow', 'run', 'factory.yml', '--ref', 'trunk', '-f', 'pr=9'],
+  ]);
+  const order = calls.map((c) => c[0]);
+  assert.ok(order.indexOf('workflow') > order.lastIndexOf('api'), 'after the status is posted');
+});
+
+test('a pending status or an unchanged success asks nobody', () => {
+  const cfg = configWith('review_bots:', '  - sentry');
+  const pending = fakeGh({ prs: [factoryPr()] });
+  run([], { cfg, gh: pending.gh, rep: report({ posters: [] }) });
+  assert.equal(dispatches(pending.calls).length, 0);
+  const done = [
+    { context: CONTEXT, state: 'success', description: 'Quiet window over; no review bots set' },
+  ];
+  const same = fakeGh({ prs: [factoryPr()], statuses: done });
+  run([], { gh: same.gh });
+  assert.equal(posts(same.calls).length, 0);
+  assert.equal(dispatches(same.calls).length, 0, 'the 15-minute run does not ask again');
+});
+
+test('each PR that settles is asked once, and only a factory PR', () => {
+  const owner = { number: 3, state: 'OPEN', labels: LABELS, author: { login: 'jatwell93' } };
+  const { gh, calls } = fakeGh({ prs: [factoryPr(9), factoryPr(10), owner] });
+  run([], { gh });
+  assert.deepEqual(
+    dispatches(calls).map((c) => c.at(-1)),
+    ['pr=9', 'pr=10'],
+  );
+});
+
+test('a failed dispatch warns and keeps going: the status is posted and the sweep covers it', () => {
+  const inner = fakeGh({ prs: [factoryPr(9), factoryPr(10)] });
+  const gh = (args) => {
+    if (args[0] === 'workflow' && args.at(-1) === 'pr=9') {
+      throw Object.assign(new Error('x'), { stderr: 'HTTP 403: Resource not accessible\nmore' });
+    }
+    return inner.gh(args);
+  };
+  const { status, lines } = run([], { gh });
+  assert.equal(status, 0);
+  assert.equal(posts(inner.calls).length, 2, 'both statuses posted');
+  assert.ok(
+    lines.includes(
+      '::warning::#9: could not ask the factory for a pass: HTTP 403: Resource not accessible',
+    ),
+  );
+  assert.ok(lines.includes('#10: asked the factory for a pass'));
 });
 
 test('the script reads the bots and the timeout from the config', () => {
