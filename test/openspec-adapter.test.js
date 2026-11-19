@@ -259,6 +259,13 @@ test('scaffold writes a valid empty change and refuses a bad or taken id', () =>
   assert.match(fs.readFileSync(path.join(dir, 'proposal.md'), 'utf8'), /^# Proposal: New thing/);
   assert.deepEqual(adapter.listTasks('new-thing'), []);
   assert.deepEqual(adapter.readAutonomy('new-thing'), { merge: 'human', pr: 'per-task', noGo: [] });
+  // The scaffolded hint works when uncommented: it must still parse as per-change.
+  const proposalPath = path.join(dir, 'proposal.md');
+  fs.writeFileSync(
+    proposalPath,
+    fs.readFileSync(proposalPath, 'utf8').replace('# pr: per-change', 'pr: per-change'),
+  );
+  assert.equal(adapter.readAutonomy('new-thing').pr, 'per-change');
   assert.throws(() => adapter.scaffold('Fix-Thing'), /lowercase/);
   assert.throws(() => adapter.scaffold('x'.repeat(43)), /limit is 42/);
   assert.throws(() => adapter.scaffold('new-thing'), /exists/);

@@ -368,7 +368,7 @@ function createOpenSpecAdapter({
       );
       fs.writeFileSync(
         path.join(dir, 'proposal.md'),
-        `# Proposal: ${heading}\n\n## Why\n\n## What changes\n\n## Autonomy\n\n\`\`\`yaml\nmerge: human\n# pr: per-change  (one PR for every task; delete the line for one PR per task)\n\`\`\`\n`,
+        `# Proposal: ${heading}\n\n## Why\n\n## What changes\n\n## Autonomy\n\n\`\`\`yaml\nmerge: human\n# pr: per-change  # one PR for every task; remove the leading "# " to enable\n\`\`\`\n`,
       );
       fs.writeFileSync(path.join(dir, 'tasks.md'), `# Tasks: ${heading}\n`);
       return { path: path.relative(root, dir).split(path.sep).join('/') };
