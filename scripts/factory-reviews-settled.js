@@ -17,6 +17,8 @@ const { runCli } = require('../lib/cli.js');
 const { loadConfig } = require('../lib/config.js');
 const { CONTEXT, OWN_CHECKS, settledStatus } = require('../lib/reviews-settled.js');
 const { createRouter, authorOf, isAppAuthor } = require('../lib/router.js');
+const { FACTORY_WORKFLOW } = require('../lib/workflow.js');
+const { ghReason } = require('../lib/gh-error.js');
 
 const defaultGh = (args) => execFileSync('gh', args, { encoding: 'utf8' });
 const FEEDBACK = path.join(__dirname, 'pr-feedback.js');
@@ -56,6 +58,24 @@ function publish(gh, sha, status) {
   ]);
 }
 
+/**
+ * Ask the factory workflow for a pass on a PR whose reviews just settled. The router
+ * then picks the step: mark the PR ready, answer a review, or nothing. Nothing else
+ * reliably follows: the CI relay is a workflow_run, and GitHub starts none for a run
+ * that waited for the owner's approval (a private repository holds a run from the
+ * Claude app), and the hourly sweep can lag by hours. This runs after the status
+ * changed, so a PR is asked once per settling, not every 15 minutes. A failed
+ * dispatch only warns: the status is already posted, and the sweep still covers it.
+ */
+function askFactory(gh, config, number, log) {
+  try {
+    gh(['workflow', 'run', FACTORY_WORKFLOW, '--ref', config.default_branch, '-f', `pr=${number}`]);
+    log(`#${number}: asked the factory for a pass`);
+  } catch (error) {
+    log(`::warning::#${number}: could not ask the factory for a pass: ${ghReason(error)}`);
+  }
+}
+
 function main(argv = process.argv.slice(2), io = {}) {
   const config = io.config || loadConfig(process.cwd());
   const gh = io.gh || defaultGh;
@@ -83,6 +103,7 @@ function main(argv = process.argv.slice(2), io = {}) {
     }
     publish(gh, report.head, status);
     log(`#${pr.number}: ${status.state} (${status.description})`);
+    if (status.state === 'success') askFactory(gh, config, pr.number, log);
   }
   return 0;
 }

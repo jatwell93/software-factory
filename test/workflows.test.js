@@ -236,7 +236,7 @@ test('each reusable workflow declares exactly the permissions it needs', () => {
     'reviews-settled.yml': {
       contents: 'read',
       'pull-requests': 'read',
-      actions: 'read',
+      actions: 'write',
       checks: 'read',
       statuses: 'write',
     },

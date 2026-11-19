@@ -17,8 +17,8 @@ const REPO = 'jatwell93/software-factory';
 const TEMPLATES = path.join(__dirname, '..', 'templates', 'workflows');
 const template = (name) => fs.readFileSync(path.join(TEMPLATES, name), 'utf8');
 
-// The reviews-settled caller as a project got it before it granted actions: read.
-const withoutActions = (text) => text.replace(/^ {2}actions: read.*\r?\n/m, '');
+// The reviews-settled caller as a project got it before it granted actions at all.
+const withoutActions = (text) => text.replace(/^ {2}actions: write.*\r?\n/m, '');
 
 function initialised() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'factory-permissions-'));
@@ -46,15 +46,26 @@ const gh = (args) => {
 
 test('a caller short of what its template grants is reported with each scope', () => {
   const old = withoutActions(template('reviews-settled.yml'));
-  assert.deepEqual(missingPermissions(old, 'reviews-settled.yml'), [['actions', 'read']]);
+  assert.deepEqual(missingPermissions(old, 'reviews-settled.yml'), [['actions', 'write']]);
 });
 
 test('a caller that grants the template, or more, is not short', () => {
   for (const name of CALLERS) {
     assert.deepEqual(missingPermissions(template(name), name), [], name);
   }
-  const more = template('reviews-settled.yml').replace('actions: read', 'actions: write');
+  const more = template('reviews-settled.yml').replace('contents: read', 'contents: write');
   assert.deepEqual(missingPermissions(more, 'reviews-settled.yml'), []);
+});
+
+test('a reviews-settled caller on actions: read (the pin before the dispatch) is short and raised in place', () => {
+  const root = initialised().root;
+  const file = caller(root);
+  const read = template('reviews-settled.yml').replace('actions: write', 'actions: read');
+  fs.writeFileSync(file, read);
+  assert.deepEqual(missingPermissions(read, 'reviews-settled.yml'), [['actions', 'write']]);
+  const fixed = grantPermissions(read, [['actions', 'write']]);
+  assert.equal(fixed, template('reviews-settled.yml'));
+  assert.equal((fixed.match(/^ {2}actions:/gm) || []).length, 1, 'raised, not added a second time');
 });
 
 test('a read grant is short of a write need, and a caller with no permissions block is not judged', () => {
@@ -66,11 +77,11 @@ test('a read grant is short of a write need, and a caller with no permissions bl
 
 test('granting adds a missing scope to the block and a raised scope in place', () => {
   const old = withoutActions(template('reviews-settled.yml'));
-  const fixed = grantPermissions(old, [['actions', 'read']]);
+  const fixed = grantPermissions(old, [['actions', 'write']]);
   assert.deepEqual(missingPermissions(fixed, 'reviews-settled.yml'), []);
-  assert.match(fixed, /^permissions:\n(?: {2}\S.*\n)*? {2}actions: read\n/m);
+  assert.match(fixed, /^permissions:\n(?: {2}\S.*\n)*? {2}actions: write\n/m);
   // The rest of the file is untouched.
-  assert.equal(fixed.replace(/^ {2}actions: read\n/m, ''), old);
+  assert.equal(fixed.replace(/^ {2}actions: write\n/m, ''), old);
   const lower = template('factory.yml').replace(/^ {2}contents: write/m, '  contents: read');
   const raised = grantPermissions(lower, [['contents', 'write']]);
   assert.equal(raised, template('factory.yml'));
@@ -78,7 +89,7 @@ test('granting adds a missing scope to the block and a raised scope in place', (
 
 test('granting keeps CRLF line endings', () => {
   const old = withoutActions(template('reviews-settled.yml')).replace(/\n/g, '\r\n');
-  const fixed = grantPermissions(old, [['actions', 'read']]);
+  const fixed = grantPermissions(old, [['actions', 'write']]);
   assert.ok(!/[^\r]\n/.test(fixed));
   assert.deepEqual(missingPermissions(fixed, 'reviews-settled.yml'), []);
 });
@@ -88,7 +99,7 @@ test('doctor fails a caller short of its template and names the scope', () => {
   fs.writeFileSync(caller(root), withoutActions(fs.readFileSync(caller(root), 'utf8')));
   const result = runDoctor(root, { git, gh }).find((r) => r.name === 'caller reviews-settled.yml');
   assert.equal(result.status, 'fail');
-  assert.match(result.detail, /actions: read/);
+  assert.match(result.detail, /actions: write/);
   assert.match(result.fix, /factory-upgrade/);
 });
 
@@ -100,7 +111,7 @@ test('upgrade from the target commit raises a short caller along with the pin', 
   assert.deepEqual(missingPermissions(text, 'reviews-settled.yml'), []);
   assert.ok(text.includes(NEW) && !text.includes(OLD));
   const file = result.files.find((f) => f.path.endsWith('reviews-settled.yml'));
-  assert.match(file.note, /permissions raised: actions: read/);
+  assert.match(file.note, /permissions raised: actions: write/);
   assert.deepEqual(result.warnings, []);
 });
 
@@ -125,20 +136,20 @@ test('upgrade from another commit leaves the permissions and warns', () => {
   fs.writeFileSync(caller(root), short);
   const result = runUpgrade({ root, ref: NEW, checkoutCommit: OLD, skills: false }, { gh });
   const text = fs.readFileSync(caller(root), 'utf8');
-  assert.deepEqual(missingPermissions(text, 'reviews-settled.yml'), [['actions', 'read']]);
+  assert.deepEqual(missingPermissions(text, 'reviews-settled.yml'), [['actions', 'write']]);
   assert.ok(result.warnings.some((w) => /reviews-settled\.yml grant less/.test(w)));
 });
 
 test('a missing scope goes at the end of the block, in the order given', () => {
   const old = withoutActions(template('reviews-settled.yml'));
   const fixed = grantPermissions(old, [
-    ['actions', 'read'],
+    ['actions', 'write'],
     ['issues', 'write'],
   ]);
   const lines = fixed.split('\n');
   const start = lines.indexOf('permissions:');
   const end = lines.findIndex((line, i) => i > start && !/^\s+\S/.test(line));
-  assert.deepEqual(lines.slice(end - 2, end), ['  actions: read', '  issues: write']);
+  assert.deepEqual(lines.slice(end - 2, end), ['  actions: write', '  issues: write']);
 });
 
 test('only the top-level block is edited, not a job that names the same scope', () => {
@@ -146,7 +157,7 @@ test('only the top-level block is edited, not a job that names the same scope', 
     'jobs:\n',
     'jobs:\n  extra:\n    permissions:\n      actions: none\n',
   );
-  const fixed = grantPermissions(old, [['actions', 'read']]);
+  const fixed = grantPermissions(old, [['actions', 'write']]);
   assert.match(fixed, /^ {6}actions: none$/m);
   assert.deepEqual(missingPermissions(fixed, 'reviews-settled.yml'), []);
 });

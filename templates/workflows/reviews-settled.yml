@@ -25,7 +25,7 @@ on:
 permissions:
   contents: read
   pull-requests: read
-  actions: read # gh pr checks reads each check's workflow run, which a private repo withholds without it
+  actions: write # gh pr checks reads each check's workflow run (a private repo withholds it); gh workflow run asks the factory for a pass once reviews settle
   checks: read
   statuses: write
 
