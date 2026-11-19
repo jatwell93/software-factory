@@ -331,6 +331,23 @@ test('outside a git checkout the hooks are skipped with a warning', () => {
   assert.ok(result.warnings.some((w) => /not a git checkout/.test(w)));
 });
 
+test('an unrelated warning does not hide why the hooks were skipped', () => {
+  const { root, git: realGit } = project();
+  runInit({ root, ref: REF, labels: false }, fakeIo(realGit)); // writes the config
+  fs.rmSync(path.join(root, '.git'), { recursive: true, force: true });
+  fs.rmSync(path.join(root, '.githooks'), { recursive: true, force: true });
+  const git = () => {
+    throw new Error('not a git repository');
+  };
+  // The config exists, so --review-bot warns; there is no checkout, so the hooks skip.
+  const result = runInit(
+    { root, ref: REF, owner: 'octo', labels: false, reviewBots: ['cursor'] },
+    fakeIo(git),
+  );
+  assert.ok(result.warnings.some((w) => /--review-bot ignored/.test(w)));
+  assert.ok(result.warnings.some((w) => /not a git checkout/.test(w)));
+});
+
 test('parseArgs reads values, repeated lists and switches', () => {
   assert.deepEqual(
     parseArgs([
