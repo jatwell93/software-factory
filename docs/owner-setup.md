@@ -51,6 +51,8 @@ Do not tick **Require a pull request before merging** for this: you cannot appro
 
 **Settings > Actions > General** sets whether workflow runs started by a bot wait for you. Under the default policy a later push by `github-actions[bot]` to a factory pull request can run as `action_required` until you click **Approve and run workflows**. The factory does not depend on the setting; decide it after you have seen whether your repository shows the prompt (a private repository may not).
 
+On a private repository the first factory push needs that click: GitHub holds the run until you approve it, and the factory cannot approve it for you. Open the pull request's **Checks** tab and click **Approve and run workflows**.
+
 ## FACTORY_DIR
 
 To run the factory's scripts and skills from your own machine (`factory-new-change.js`, `pr-feedback.js`, `cleanup-merged.js`, `factory-doctor.js`, `factory-upgrade.js`), set the environment variable `FACTORY_DIR` to a checkout of <https://github.com/jatwell93/software-factory>, then call `node "$FACTORY_DIR/scripts/<name>.js"`.
