@@ -29,7 +29,7 @@ function project({ ci = true, scripts = { lint: 'eslint .', test: 'node --test' 
 }
 
 /** Real git, a recording gh and a recording adapter setup. */
-function fakeIo(git, { labels = [], ghError = null, setupError = null } = {}) {
+function fakeIo(git, { labels = [], ghError = null, setupError = null, setupWrites = [] } = {}) {
   const calls = { gh: [], setup: 0 };
   return {
     calls,
@@ -39,8 +39,12 @@ function fakeIo(git, { labels = [], ghError = null, setupError = null } = {}) {
       if (ghError) throw new Error(ghError);
       return args[1] === 'list' ? labels.join('\n') : '';
     },
-    setup: () => {
+    setup: (config, root) => {
       calls.setup += 1;
+      for (const rel of setupWrites) {
+        fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+        fs.writeFileSync(path.join(root, rel), 'x');
+      }
       if (setupError) throw new Error(setupError);
     },
   };
@@ -303,6 +307,17 @@ test('a failing adapter setup or gh is a warning, not a failed init', () => {
   assert.ok(result.warnings.some((w) => /openspec: not found/.test(w)));
   assert.ok(result.warnings.some((w) => /not logged in/.test(w)));
   assert.ok(fs.existsSync(path.join(root, 'factory.config.yml')));
+});
+
+test('files the adapter setup wrote are listed, and only those', () => {
+  const { root, git } = project();
+  const setupWrites = ['openspec/config.yaml', 'openspec/changes/.gitkeep'];
+  const result = runInit({ root, ref: REF }, fakeIo(git, { setupWrites }));
+  const listed = result.files.filter((f) => f.note === 'adapter setup').map((f) => f.path);
+  assert.deepEqual(listed.sort(), setupWrites.slice().sort());
+  assert.equal(statusOf(result, 'openspec/config.yaml'), 'created');
+  assert.equal(statusOf(result, 'factory.config.yml'), 'created');
+  assert.equal(result.files.find((f) => f.path === 'factory.config.yml').note, undefined);
 });
 
 test('outside a git checkout the hooks are skipped with a warning', () => {
