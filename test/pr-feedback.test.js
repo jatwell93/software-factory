@@ -1,7 +1,13 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { summarize, summarizeChecks, fetchReport, main } = require('../scripts/pr-feedback.js');
+const {
+  summarize,
+  summarizeChecks,
+  fetchReport,
+  fetchChecks,
+  main,
+} = require('../scripts/pr-feedback.js');
 const { tempRoot } = require('./helpers.js');
 
 const NOW = Date.parse('2026-10-21T12:00:00Z');
@@ -294,6 +300,36 @@ test('fetchReport reads checks JSON from a non-zero gh exit (pending or failed c
   assert.ok(
     calls[1].includes('owner=o') && calls[1].includes('repo=r') && calls[1].includes('number=667'),
   );
+});
+
+test('fetchChecks reads the snapshot file the workflow saved, and falls back to gh without one', () => {
+  const rows = [{ name: 'CI', bucket: 'pass', workflow: 'CI' }];
+  const calls = [];
+  const gh = (args) => {
+    calls.push(args[0]);
+    return JSON.stringify([{ name: 'live', bucket: 'pass', workflow: 'CI' }]);
+  };
+  const env = { FACTORY_CHECKS_FILE: '/tmp/checks.json' };
+  assert.deepEqual(fetchChecks(gh, 7, { env, readFile: () => JSON.stringify(rows) }), rows);
+  assert.deepEqual(calls, []);
+
+  const broken = () => {
+    throw new Error('ENOENT');
+  };
+  assert.equal(fetchChecks(gh, 7, { env, readFile: broken })[0].name, 'live');
+  assert.equal(fetchChecks(gh, 7, { env, readFile: () => '{}' })[0].name, 'live');
+  assert.equal(fetchChecks(gh, 7, { env: {} })[0].name, 'live');
+});
+
+test('main checks <pr> prints the live checks even when a snapshot file is set', () => {
+  const rows = [{ name: 'CI', bucket: 'pass', workflow: 'CI' }];
+  let out = '';
+  const code = main(['checks', '7'], {
+    gh: () => JSON.stringify(rows),
+    out: { write: (s) => (out += s) },
+  });
+  assert.equal(code, 0);
+  assert.deepEqual(JSON.parse(out), rows);
 });
 
 test('fetchReport treats "no checks reported" right after a push as pending, and rethrows other errors', () => {

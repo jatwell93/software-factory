@@ -314,6 +314,21 @@ jobs:
         shell: bash
         run: node "$FACTORY_DIR/scripts/factory-install-spec-cli.js"
 
+      # The agent runs with the Claude GitHub App's token (the action swaps it in),
+      # which can lack checks and statuses read on a private repo. This token has
+      # them, so save the CI state here and point pr-feedback.js at it. A failure
+      # leaves no file, and pr-feedback.js then asks GitHub itself.
+      - name: Save the PR's CI state for the agent
+        if: needs.route.outputs.pr != ''
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ needs.route.outputs.pr }}
+        run: |
+          node "$FACTORY_DIR/scripts/pr-feedback.js" checks "$PR" > "$RUNNER_TEMP/factory-checks.json"
+          echo "FACTORY_CHECKS_FILE=$RUNNER_TEMP/factory-checks.json" >> "$GITHUB_ENV"
+
       - name: Run Claude
         id: claude
         uses: anthropics/claude-code-action@v1
