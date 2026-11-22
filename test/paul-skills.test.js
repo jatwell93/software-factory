@@ -104,6 +104,34 @@ test('upgrade refreshes a PAUL project to its own run-spec and adds no other ski
   );
 });
 
+test('upgrade with an unreadable config writes no skill and says why', () => {
+  const { root, git } = project();
+  runInit({ root, ref: REF, specSource: 'paul', labels: false, adapterSetup: false }, io(git));
+  const installed = path.join(root, '.claude', 'skills', 'run-spec', 'SKILL.md');
+  const before = read(installed);
+  fs.writeFileSync(path.join(root, 'factory.config.yml'), 'spec_source: [\n');
+  const NEW = 'b'.repeat(40);
+  const result = runUpgrade({ root, ref: NEW, checkoutCommit: NEW }, { gh: () => NEW });
+  assert.equal(read(installed), before, 'run-spec is left as it was');
+  assert.deepEqual(fs.readdirSync(path.join(root, '.claude', 'skills')).sort(), [
+    'babysit-pr',
+    'run-spec',
+  ]);
+  assert.ok(
+    result.warnings.some((w) => /skills not updated: factory\.config\.yml cannot be read/.test(w)),
+  );
+  assert.equal(
+    result.files.some((f) => f.path.startsWith('.claude/skills/')),
+    false,
+  );
+});
+
+test('the PAUL run-spec limits its per-change guard to the phase', () => {
+  const text = skillText('run-spec', 'paul');
+  assert.match(text, /first unchecked plan line in this phase's section/);
+  assert.doesNotMatch(text, /first unchecked plan in the branch's roadmap/);
+});
+
 test('an OpenSpec project is not asked for PAUL', () => {
   const { root, git } = project();
   runInit({ root, ref: REF, labels: false, adapterSetup: false }, io(git));

@@ -147,7 +147,8 @@ title>` and say in the body that later plans land on this PR. Not a draft:
   done and reviews have settled.
 - **Later task** (PR named): re-check the state first, because the run may have
   waited in the queue. The PR must still be open, and the task named in the
-  prompt must still be the first unchecked plan in the branch's roadmap. If
+  prompt must still be the first unchecked plan line in this phase's section of
+  the branch's roadmap (other phases' lines do not count). If
   not, print why and stop. Work on the checked-out PR branch; do not create a
   branch or a new PR. The workflow has already merged `<default>` into it when it
   could; if the prompt says the base is older, say so in the PR body.
