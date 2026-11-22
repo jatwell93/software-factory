@@ -193,6 +193,17 @@ test('the sidecar and a plan can each make a task an owner task', () => {
   );
 });
 
+test('an unquoted dotted id is a number to YAML and is refused, not read as another task', () => {
+  // depends_on: [1.10] is the float 1.1: it would block on task 1.1 instead.
+  assert.throws(() => parsePlan('---\ndepends_on: [1.10]\n---\n'), /quote the id/);
+  assert.throws(() => parsePlan('---\ndepends_on: [1]\n---\n'), /quote the id/);
+  assert.deepEqual(parsePlan('---\ndepends_on: ["1.10", "01-02"]\n---\n').blockedBy, [
+    '1.10',
+    '1.2',
+  ]);
+  assert.throws(() => parseSidecar('owner: [1.10]\n'), /must be a list of text/);
+});
+
 test('with no sidecar the defaults apply', () => {
   const root = project();
   fs.rmSync(path.join(root, '.paul/phases/01-fix-one/factory.yml'));

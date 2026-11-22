@@ -57,7 +57,13 @@ function taskIdOf(planId) {
 
 /** A plan id ("01-03") or a task id ("1.3") to a task id; anything else is a format error. */
 function toTaskId(value, where) {
-  const text = String(value).trim();
+  // An unquoted 1.10 is the number 1.1 to YAML: it would name the wrong task, so only text counts.
+  if (typeof value !== 'string') {
+    throw new PaulFormatError(
+      `${where}: ${JSON.stringify(value)} is not text: quote the id ("1.10", "01-03"), since YAML reads 1.10 as the number 1.1`,
+    );
+  }
+  const text = value.trim();
   if (/^\d+(?:\.\d+)?-\d+$/.test(text)) return taskIdOf(text);
   if (/^\d+(?:\.\d+)+$/.test(text)) return text;
   throw new PaulFormatError(`${where}: "${text}" is not a plan id such as 01-03`);
