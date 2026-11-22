@@ -118,7 +118,7 @@ Do the edit on its own pull request:
 2. Merge that pull request. Wait for the guard and your CI to pass first.
 3. Tick the task in the change's `tasks.md` on the factory's pull request (or on `main` before it continues), then remove `needs-human` from the issue so the factory resumes. Update the factory branch from `main` if the edit affects its checks.
 
-Do not make the edit on the factory branch: the guard fails and, if you then push a revert, its status may stay stale (close and reopen the pull request to re-run it).
+Do not make the edit on the factory branch: the guard fails, and it stays failed until the head changes (a close and reopen re-runs it on the same head and fails again). Pushing a revert re-runs the guard on the new head.
 
 ## FACTORY_DIR
 

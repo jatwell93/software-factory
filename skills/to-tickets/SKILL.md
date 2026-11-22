@@ -53,7 +53,9 @@ change the factory cannot run never starts.
 - A task that needs a `no_go` path (the factory's baseline, the config's
   `protected_paths` and the proposal's `no_go` list), a vendor console or
   production access is an `(owner)` task, or the change is not for the factory
-  at all.
+  at all. Say in the owner task's ticket that an edit to a protected path goes on
+  its own pull request from the default branch, never on the factory's: the
+  no-go guard fails the factory's and has no owner exemption.
 - **Wide refactors** (one mechanical change whose blast radius spans the
   codebase) use expand-migrate-contract instead: expand (new form beside the
   old), migrate in batches sized by blast radius, each blocked by the expand,

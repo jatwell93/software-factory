@@ -43,6 +43,7 @@ test('labels the tracking issue needs-human, then comments the task for the owne
   assert.match(body, /^@octo Task 2\.2 of `add-x` is an owner task/);
   assert.match(body, /> Rotate the vendor key/);
   assert.match(body, /tick it in the change's task list on `main`, then remove `needs-human`/);
+  assert.match(body, /edits a protected path, make the edit on its own pull request/);
 });
 
 test("on a per-change PR, reads the branch's task list and asks for the tick there", () => {
