@@ -205,8 +205,11 @@ test('readyComment mentions the configured owner', () => {
 
 test('loadAdapter names the adapters that exist when spec_source has none', () => {
   assert.equal(loadAdapter(config, { root: tempRoot() }).name, 'openspec');
-  const unknown = { ...config, spec_source: 'paul' };
-  assert.throws(() => loadAdapter(unknown), /"paul" has no adapter installed \(have: openspec\)/);
+  const unknown = { ...config, spec_source: 'gsd' };
+  assert.throws(
+    () => loadAdapter(unknown),
+    /"gsd" has no adapter installed \(have: openspec, paul\)/,
+  );
 });
 
 test('loadAdapter gives the adapter the config id limit', () => {

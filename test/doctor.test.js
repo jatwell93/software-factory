@@ -102,11 +102,11 @@ test('a spec_source with no adapter fails', () => {
   const file = path.join(root, 'factory.config.yml');
   fs.writeFileSync(
     file,
-    fs.readFileSync(file, 'utf8').replace('spec_source: openspec', 'spec_source: paul'),
+    fs.readFileSync(file, 'utf8').replace('spec_source: openspec', 'spec_source: gsd'),
   );
   const result = find(runDoctor(root, { git, gh: healthyGh() }), 'adapter');
   assert.equal(result.status, 'fail');
-  assert.match(result.detail, /paul/);
+  assert.match(result.detail, /gsd/);
 });
 
 test('a missing caller workflow fails and names it', () => {

@@ -9,19 +9,25 @@ const SKILLS = ['run-spec', 'to-tickets', 'babysit-pr', 'handover', 'resume-chan
 const schema = require('../schema/factory.config.schema.json');
 
 const read = (...parts) => fs.readFileSync(path.join(root, ...parts), 'utf8');
-const body = (name) => read('skills', name, 'SKILL.md');
+// A name is a skill, or <spec source>/<skill> for a source's own version of one.
+const body = (name) => read('skills', ...name.split('/'), 'SKILL.md');
 const lines = (name) => body(name).split(/\r?\n/);
 
-test('the skills folder holds exactly the five skills', () => {
-  assert.deepEqual(fs.readdirSync(path.join(root, 'skills')).sort(), [...SKILLS].sort());
+const VARIANTS = ['paul/run-spec'];
+
+test('the skills folder holds the five skills and the folders of spec-source variants', () => {
+  assert.deepEqual(
+    fs.readdirSync(path.join(root, 'skills')).sort(),
+    [...SKILLS, ...new Set(VARIANTS.map((v) => v.split('/')[0]))].sort(),
+  );
 });
 
-for (const name of SKILLS) {
+for (const name of [...SKILLS, ...VARIANTS]) {
   test(`${name}: frontmatter names the skill and describes when to use it`, () => {
     const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n/.exec(body(name));
     assert.ok(match, 'frontmatter present');
     const meta = parse(match[1]);
-    assert.equal(meta.name, name);
+    assert.equal(meta.name, name.split('/').pop());
     assert.ok(meta.description.length > 80, 'a description the model can match on');
   });
 
