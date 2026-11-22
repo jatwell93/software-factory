@@ -9,6 +9,7 @@ Plan a change with an agent, then let it build the change task by task as pull r
 - `schema/factory.config.schema.json`: every setting a project makes in its `factory.config.yml`.
 - `adapters/contract.d.ts`, `contract.js` and `contract-suite.js`: the interface a spec framework implements, and the shared tests every adapter must pass. OpenSpec comes first; others can follow.
 - `adapters/openspec.js`: the OpenSpec adapter (changes under `openspec/changes/<id>/`). It runs the shared contract suite, and its `setup` is also tested against the real `openspec` CLI when that is installed.
+- `adapters/paul.js`: the PAUL adapter (phases under `.paul/phases/`, plans in `.paul/ROADMAP.md`). A change is a phase directory's slug, a task a plan (`01-02` is `1.2`). The factory's settings live in a `factory.yml` beside the phase, `archive` writes an `ARCHIVED` marker there, and `tickTask` edits the roadmap line only. It passes the shared contract suite but is **not registered** in `lib/adapters.js` yet: the five skills are still written for OpenSpec, so `spec_source: paul` would not run.
 - `lib/github-source.js`: reads files of a branch that is not checked out, through the GitHub contents API. An adapter given it as its `source` reads that branch and is read-only.
 - `examples/`: a sample config.
 - `scripts/check-no-go.js`: fails when a factory branch or PR touches a protected path (the factory's baseline in `lib/baseline.js`, the project's `protected_paths`, and the change's own list).
