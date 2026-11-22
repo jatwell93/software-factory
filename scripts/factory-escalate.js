@@ -39,6 +39,8 @@ function comment(config, id, task, ref = '') {
     '',
     `Do it, tick it in the change's task list on \`${ref || config.default_branch}\`, then remove \`${config.labels.needs_human}\` to resume.`,
     'If the task is still unticked when the label goes, the factory asks again.',
+    '',
+    'If it edits a protected path, make the edit on its own pull request from the default branch with no `factory:*` label: `factory/no-go-guard` fails the pull request of the factory and has no owner exemption.',
   ].join('\n');
 }
 
