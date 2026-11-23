@@ -72,6 +72,15 @@ In a Claude session in your project:
 2. Run `/to-tickets add-health-check`. Answer the quiz on the slices. It writes `tasks.md`, opens a tracking issue and a plan pull request.
 3. Merge the plan pull request. That merge is the go.
 
+With `--spec-source paul` there is no `/to-tickets`: plan the phase with `/paul:plan` (one plan per task, `autonomous: true` unless it is an owner task) and commit the roadmap and plans on a branch. The change id is the phase name without its number (phase `05-security-alerts` is change `security-alerts`). The agent that pushes the plan pull request labels it, and you check the labels before you merge:
+
+```
+gh label create factory:security-alerts --force
+gh pr create --label factory:security-alerts --label factory-ready
+```
+
+Merging a plan pull request without both labels starts nothing (the Factory run logs `not a factory PR`). If that happens, start the change by hand with `gh workflow run Factory -f change_id=security-alerts`. `init` writes the same rule into your `AGENTS.md`, so the agent that opens the plan pull request has it.
+
 ## 5. Watch it build
 
 The factory opens a pull request for the first task, waits for CI and the review bots, fixes what they raise, then marks the pull request ready. You merge each one (or the single per-change pull request, once `WIP:` is gone from its title). When no task is left, the factory archives the change and asks you to merge the last pull request.
