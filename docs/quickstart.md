@@ -32,6 +32,8 @@ It detects your stack, your owner and default branch, and your CI workflow names
 
 If it cannot find a gate it stops and asks for one: pass `--gate "<test command>"` or `--ci-workflow "<workflow name>"`. `--dry-run` shows the plan and writes nothing. A second run changes nothing.
 
+A project with no root `package.json` (frontend and backend in subfolders, say) gets no detected gate: pass each with `--gate`, and set `runner.install` and the runtime versions in the config. `--ci-workflow` must name a workflow that really runs on pull requests: check its name under the repository's Actions tab. A workflow file GitHub cannot parse never shows up there, so the factory would wait for a CI run that never comes. `--spec-source paul` selects the [PAUL adapter](../README.md); without it you get OpenSpec.
+
 Open `factory.config.yml` and read it before you commit. The gates are what the agent must pass before it pushes.
 
 ## 3. Do the owner steps
@@ -40,7 +42,7 @@ Open `factory.config.yml` and read it before you commit. The gates are what the 
 
 1. Add the `CLAUDE_CODE_OAUTH_TOKEN` repository secret.
 2. Check the Claude GitHub App covers the repository.
-3. Commit what `init` wrote in one pull request and merge it.
+3. Commit what `init` wrote in one pull request and merge it. Only the files `init` listed: check `git status` first, so a stray folder or compiled file does not ride along. The factory's checks that run from the default branch do not exist yet, so only `factory/reviews-settled` runs on this pull request, and it ends green with "nothing to settle". On a pin older than the fix it fails with "cannot read factory.config.yml": ignore it, it is not a required check.
 4. Open any other pull request (a README edit is enough) and let its checks finish. The factory's two required checks, `factory/no-go-guard` and `factory/change-ids`, only exist after they have run once. On a private repository you may have to click **Approve and run workflows** on that pull request.
 5. Add a branch ruleset on `main` that requires those two checks, your CI check and "Block force pushes".
 
