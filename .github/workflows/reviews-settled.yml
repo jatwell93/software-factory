@@ -52,7 +52,21 @@ jobs:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
 
+      # This workflow runs from the PR's own workflow file, so the install PR (which adds
+      # factory.config.yml) runs it before the default branch has any config to read.
+      # There is nothing to settle then: end green instead of failing the PR's checks.
+      - name: Is the factory installed on the default branch?
+        id: installed
+        run: |
+          if [ -f factory.config.yml ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "The default branch has no factory.config.yml yet (this is the install pull request): nothing to settle."
+          fi
+
       - name: Checkout the factory at the pinned ref
+        if: steps.installed.outputs.present == 'true'
         uses: actions/checkout@v7
         with:
           repository: jatwell93/software-factory
@@ -61,16 +75,20 @@ jobs:
           persist-credentials: false
 
       - name: Install the factory's dependencies
+        if: steps.installed.outputs.present == 'true'
         run: npm ci --omit=dev --prefix .software-factory
 
       - name: Read the runner settings from factory.config.yml
+        if: steps.installed.outputs.present == 'true'
         id: env
         run: node .software-factory/scripts/factory-env.js >> "$GITHUB_OUTPUT"
 
       - name: Setup Node.js
+        if: steps.installed.outputs.present == 'true'
         uses: actions/setup-node@v7
         with:
           node-version: ${{ steps.env.outputs.node_version }}
 
       - name: Publish the status
+        if: steps.installed.outputs.present == 'true'
         run: node .software-factory/scripts/factory-reviews-settled.js ${PR_NUMBER:+"$PR_NUMBER"}

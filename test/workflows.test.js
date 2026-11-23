@@ -310,3 +310,16 @@ test('the reviews-settled caller triggers on PR and review events and a schedule
     '${{ github.event.pull_request.number || inputs.pr }}',
   );
 });
+
+test('reviews-settled ends green on the install PR: every step that needs the config waits for the check that it exists', () => {
+  // The caller runs from the PR's own file, before the default branch has factory.config.yml.
+  const steps = readReusable('reviews-settled.yml').jobs.settle.steps;
+  const names = steps.map((s) => s.name);
+  const check = names.indexOf('Is the factory installed on the default branch?');
+  assert.ok(check > 0, 'the check comes after the default-branch checkout');
+  assert.equal(steps[check].id, 'installed');
+  assert.match(steps[check].run, /\[ -f factory\.config\.yml \]/);
+  for (const step of steps.slice(check + 1)) {
+    assert.equal(step.if, "steps.installed.outputs.present == 'true'", step.name);
+  }
+});
