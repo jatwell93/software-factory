@@ -38,6 +38,14 @@ test('an unknown command is a usage error that names it', () => {
   assert.match(err, /unknown command "frobnicate"/);
 });
 
+test('a name inherited from Object.prototype is an unknown command, not a crash', () => {
+  for (const name of ['toString', 'constructor', '__proto__', 'hasOwnProperty']) {
+    const { code, err } = capture([name]);
+    assert.equal(code, 2, name);
+    assert.match(err, /unknown command/);
+  }
+});
+
 test('the script runs in the given directory and its exit code comes back', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'factory-door-'));
   try {
