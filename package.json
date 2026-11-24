@@ -5,6 +5,9 @@
   "description": "Plan with an agent, build unattended: a reusable factory for spec-driven change PRs.",
   "license": "GPL-3.0-only",
   "type": "commonjs",
+  "bin": {
+    "factory": "bin/factory.js"
+  },
   "engines": {
     "node": ">=22"
   },
