@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
-const { syncRepo, syncPins, parseConsumers } = require('../lib/pin-sync.js');
+const { syncRepo, syncPins, parseConsumers, refLabel } = require('../lib/pin-sync.js');
 
 const REF = 'a'.repeat(40);
 const sh = (cwd, ...args) =>
@@ -154,4 +154,78 @@ test('a failing repository is reported and the next one still runs', () => {
 
 test('parseConsumers ignores blanks and comments', () => {
   assert.deepEqual(parseConsumers('# mine\nC:\\a\n\n  /b  # note\r\n'), ['C:\\a', '/b']);
+});
+
+test('refLabel keeps a tag whole and cuts only a full commit SHA', () => {
+  assert.equal(refLabel(REF), 'aaaaaaa');
+  assert.equal(refLabel('v1.2.3'), 'v1.2.3');
+  assert.notEqual(refLabel('v1.2.3'), refLabel('v1.2.30'));
+  assert.equal(refLabel('v1.2.'), 'v1.2');
+  assert.equal(refLabel('v1..2/x.lock'), 'v1.2-x-lock');
+});
+
+test('a detached checkout is put back on the same commit', () => {
+  const { dir, root } = consumer();
+  try {
+    const head = sh(root, 'rev-parse', 'HEAD');
+    sh(root, 'switch', '-q', '--detach', head);
+    const result = syncRepo(root, { ref: REF, checkoutCommit: REF }, io([]));
+    assert.equal(result.status, 'opened');
+    assert.equal(sh(root, 'rev-parse', 'HEAD'), head);
+    assert.throws(() => sh(root, 'symbolic-ref', '-q', 'HEAD'));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a failed PR create removes the remote branch so a retry works', () => {
+  const { dir, root } = consumer();
+  try {
+    const fake = io([]);
+    let fail = true;
+    const flaky = {
+      ...fake,
+      gh: (r, args) => {
+        if (fail) throw new Error('gh: network down');
+        return fake.gh(r, args);
+      },
+    };
+    const first = syncPins([root], { ref: REF, checkoutCommit: REF }, flaky)[0];
+    assert.equal(first.status, 'failed');
+    assert.equal(
+      sh(root, 'ls-remote', '--heads', 'origin'),
+      sh(root, 'ls-remote', '--heads', 'origin', 'main'),
+    );
+    assert.equal(sh(root, 'branch', '--list', 'chore/*'), '');
+    fail = false;
+    assert.equal(syncRepo(root, { ref: REF, checkoutCommit: REF }, flaky).status, 'opened');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('dry run reads the default branch, not the checked-out branch, and leaves no worktree', () => {
+  const { dir, root } = consumer();
+  try {
+    sh(root, 'switch', '-q', '-c', 'side');
+    const seen = [];
+    const fake = io([]);
+    const result = syncRepo(
+      root,
+      { ref: REF, checkoutCommit: REF, dryRun: true },
+      {
+        ...fake,
+        upgrade: (opts) => {
+          seen.push(opts.root);
+          return fake.upgrade(opts);
+        },
+      },
+    );
+    assert.equal(result.status, 'would-open');
+    assert.notEqual(path.resolve(seen[0]), path.resolve(root));
+    assert.equal(sh(root, 'worktree', 'list').split('\n').length, 1);
+    assert.equal(sh(root, 'rev-parse', '--abbrev-ref', 'HEAD'), 'side');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
