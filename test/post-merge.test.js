@@ -199,3 +199,23 @@ test('lists what waits on the owner and survives a cleanup failure', () => {
     cleanup(dir);
   }
 });
+
+test('main checked out in another worktree: parks on origin/main, still deletes the branch and reports', () => {
+  const { dir, root, headOid } = setup();
+  try {
+    const primary = path.join(dir, 'primary');
+    sh(root, 'worktree', 'add', '-q', primary, 'main');
+    const x = io(root, merged(headOid, []), {
+      open: [{ number: 9, title: 'fix: y', url: 'u', labels: [{ name: 'needs-human' }] }],
+    });
+    assert.equal(postMerge({}, x), 0);
+    assert.throws(() => sh(root, 'symbolic-ref', '-q', 'HEAD'), 'detached');
+    assert.equal(sh(root, 'rev-parse', 'HEAD').trim(), sh(root, 'rev-parse', 'origin/main').trim());
+    assert.equal(sh(root, 'branch', '--list', 'feature/x').trim(), '');
+    const text = x.lines.join('\n');
+    assert.match(text, /checked out in another worktree/);
+    assert.match(text, /waiting on you: #9/);
+  } finally {
+    cleanup(dir);
+  }
+});
