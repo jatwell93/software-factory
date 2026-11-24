@@ -347,6 +347,14 @@ jobs:
           # Any bot may start a babysit pass: the action refuses a bot actor that is
           # not allowed, and a refused run fails and queues a retry.
           allowed_bots: ${{ needs.route.outputs.allowed_bots }}
+          # The action denies test runners, interpreters and node scripts on a PR whose
+          # author is not confirmed to have write access, and the author of a factory PR
+          # is the Claude GitHub App. In per-task mode the owner's merge of one task's PR
+          # starts the next task with that PR as the event, so the next task could not run
+          # its gates. The router already trusts only an open PR authored by the app and
+          # labelled for a change, so the action's check adds nothing a fork could not
+          # already be stopped by.
+          restrict_untrusted_prs: 'false'
           # change_id and pr come from the route job, which accepts only a plain
           # change id and a PR number.
           prompt: |
