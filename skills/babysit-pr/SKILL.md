@@ -125,6 +125,13 @@ End with a short report: PR, final check state, each item and what you did
 (fixed in `<sha>` / replied / needs decision), and anything still open. If the
 PR body no longer matches the change, update it with `gh pr edit <n> --body-file`.
 
+## After the owner merges
+
+The owner does not need to say so. When a PR you babysat shows `MERGED`
+(`gh pr view <n> --json state`), run `node "$FACTORY_DIR/scripts/factory-post-merge.js" <n>`
+and carry on with what it prints. A bot comment that arrives after the merge is
+not lost: note it for the follow-up the factory opens.
+
 ## Never
 
 - Merge, enable auto-merge, or approve. Merging follows the change's autonomy

@@ -29,8 +29,10 @@ gives the literal path: write it in place of `$FACTORY_DIR`.
 3. Check the live state; the handover may be stale:
    - `git status -sb`, `git log --oneline -5`
    - if PRs from the last session have merged, run
-     `node "$FACTORY_DIR/scripts/cleanup-merged.js"` to delete their branches and
-     move onto an up-to-date default branch
+     `node "$FACTORY_DIR/scripts/factory-post-merge.js" <pr>` for each: it pulls
+     the default branch, deletes the merged branch when GitHub has every commit
+     on it, and tidies the rest. Do not wait for the user to say a PR merged:
+     `gh pr view <n> --json state` tells you
    - for each open PR named in the handover: `node "$FACTORY_DIR/scripts/pr-feedback.js" <n>`,
      then hand any actionable items to the `babysit-pr` loop
 4. Report in a few lines: state, open PRs, what is waiting on the user, and the
