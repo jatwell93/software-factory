@@ -5,7 +5,8 @@ const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
-const { postMerge } = require('../lib/post-merge.js');
+const { postMerge, fallbackConfig } = require('../lib/post-merge.js');
+const { main: scriptMain } = require('../scripts/factory-post-merge.js');
 
 const sh = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: 'pipe' });
 const CONFIG = {
@@ -218,4 +219,52 @@ test('main checked out in another worktree: parks on origin/main, still deletes 
   } finally {
     cleanup(dir);
   }
+});
+
+test('fallbackConfig reads the default branch from origin/HEAD, else main', () => {
+  const { dir, root } = setup();
+  try {
+    const git = (args) => sh(root, ...args);
+    assert.equal(fallbackConfig(git).default_branch, 'main');
+    sh(root, 'branch', '-m', 'main', 'trunk');
+    sh(root, 'push', '-q', 'origin', 'trunk');
+    sh(root, 'remote', 'set-head', 'origin', 'trunk');
+    assert.equal(fallbackConfig(git).default_branch, 'trunk');
+    assert.equal(fallbackConfig(git).labels.needs_human, 'needs-human');
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test('the script works in a repository with no factory.config.yml', () => {
+  const { dir, root, headOid } = setup();
+  try {
+    const lines = [];
+    const code = scriptMain(['60'], root, (m) => lines.push(m), {
+      gh: (args) => (args[1] === 'view' ? JSON.stringify(merged(headOid)) : '[]'),
+    });
+    assert.equal(code, 0);
+    assert.equal(sh(root, 'rev-parse', '--abbrev-ref', 'HEAD').trim(), 'main');
+    assert.equal(sh(root, 'branch', '--list', 'feature/x').trim(), '');
+    assert.match(lines.join('\n'), /PR #7 merged/);
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test('a config that exists but is broken still fails', () => {
+  const { dir, root, headOid } = setup();
+  try {
+    fs.writeFileSync(path.join(root, 'factory.config.yml'), 'not: [valid');
+    assert.throws(
+      () => scriptMain([], root, () => {}, { gh: () => JSON.stringify(merged(headOid)) }),
+      /factory\.config\.yml/,
+    );
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test('a bad argument is a usage error', () => {
+  assert.throws(() => scriptMain(['abc'], process.cwd(), () => {}), /usage/);
 });
