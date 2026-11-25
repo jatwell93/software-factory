@@ -126,7 +126,7 @@ Do the edit on its own pull request:
 
 1. Branch from `main` (not from the factory branch) and make the edit, for example adding a bot to `review_bots` in `factory.config.yml`. Do not add a `factory:*` label.
 2. Merge that pull request. Wait for the guard and your CI to pass first.
-3. Tick the task in the change's `tasks.md` on the factory's pull request (or on `main` before it continues), then remove `needs-human` from the issue so the factory resumes. Update the factory branch from `main` if the edit affects its checks.
+3. Tick the task in the change's `tasks.md` on the factory's pull request (or on `main` before it continues), then reply on the issue: within the hour the factory removes `needs-human` and resumes (or remove it yourself to resume at once). Update the factory branch from `main` if the edit affects its checks.
 
 Do not make the edit on the factory branch: the guard fails, and it stays failed until the head changes (a close and reopen re-runs it on the same head and fails again). Pushing a revert re-runs the guard on the new head.
 

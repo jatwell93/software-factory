@@ -18,7 +18,7 @@ const WORKFLOW = YAML.parse(TEXT);
 const REF = 'b'.repeat(40);
 const config = loadConfig(tempRoot());
 const CALLER = YAML.parse(renderCaller('factory.yml', { factoryRef: REF, config }));
-const { route, sweep, run, escalate, report } = WORKFLOW.jobs;
+const { route, sweep, requeue, run, escalate, report } = WORKFLOW.jobs;
 const lateComment = WORKFLOW.jobs['late-comment'];
 
 const stepNames = (job) => job.steps.map((s) => s.name);
@@ -44,7 +44,7 @@ test('the Claude token reaches only the one step that runs the agent', () => {
   assert.match(holders[0].uses, /^anthropics\/claude-code-action@/);
 });
 
-test('top-level permissions are exactly what the run needs, and only the sweep raises its own', () => {
+test('top-level permissions are exactly what the run needs, and only the sweep and requeue raise their own', () => {
   assert.deepEqual(WORKFLOW.permissions, {
     contents: 'write',
     'pull-requests': 'write',
@@ -57,7 +57,7 @@ test('top-level permissions are exactly what the run needs, and only the sweep r
   const own = Object.entries(WORKFLOW.jobs).filter(([, job]) => job.permissions);
   assert.deepEqual(
     own.map(([name]) => name),
-    ['sweep'],
+    ['sweep', 'requeue'],
   );
   assert.deepEqual(sweep.permissions, {
     contents: 'read',
@@ -158,7 +158,7 @@ test('the factory runs from outside the working tree in the run job, inside it i
   assert.match(runText(run), /node "\$FACTORY_DIR\/scripts\/factory-check-change\.js"/);
   assert.doesNotMatch(runText(run), /node \.software-factory/, 'no copy the agent could edit');
   assert.match(runText(run), /npm ci --omit=dev --prefix \.software-factory/);
-  for (const job of [route, sweep, escalate, lateComment, report]) {
+  for (const job of [route, sweep, requeue, escalate, lateComment, report]) {
     for (const m of runText(job).matchAll(/node (\S+)/g)) {
       assert.match(m[1], /^\.software-factory\/scripts\//, m[1]);
     }
@@ -169,7 +169,7 @@ test('every factory checkout is at the pin, into .software-factory, without cred
   const checkouts = Object.values(WORKFLOW.jobs)
     .flatMap((job) => job.steps)
     .filter((s) => /^actions\/checkout@/.test(s.uses) && s.with.repository);
-  assert.equal(checkouts.length, 6);
+  assert.equal(checkouts.length, 7);
   for (const step of checkouts) {
     assert.equal(step.with.repository, 'jatwell93/software-factory');
     assert.equal(step.with.ref, '${{ inputs.factory_ref }}');
@@ -179,7 +179,7 @@ test('every factory checkout is at the pin, into .software-factory, without cred
 });
 
 test('the jobs that run no agent check out the default branch, never the PR', () => {
-  for (const job of [route, sweep, escalate, lateComment, report]) {
+  for (const job of [route, sweep, requeue, escalate, lateComment, report]) {
     const own = job.steps.find((s) => /^actions\/checkout@/.test(s.uses) && !s.with.repository);
     assert.match(own.with.ref, /default_branch/);
     assert.equal(own.with['persist-credentials'], false);
@@ -277,4 +277,12 @@ test('the caller passes the pin as the ref and the input, and only the Claude se
   const job = CALLER.jobs.factory;
   assert.equal(job.uses, `jatwell93/software-factory/.github/workflows/factory.yml@${REF}`);
   assert.deepEqual(job.with, { factory_ref: REF });
+});
+
+test('the requeue job runs on the schedule only, runs no agent, and may edit issues and dispatch', () => {
+  assert.equal(requeue.needs, 'route');
+  assert.equal(requeue.if, "github.event_name == 'schedule'");
+  assert.deepEqual(requeue.permissions, { contents: 'read', issues: 'write', actions: 'write' });
+  assert.ok(runText(requeue).includes('factory-requeue.js'));
+  assert.ok(!requeue.steps.some((s) => /claude-code-action/.test(s.uses || '')));
 });

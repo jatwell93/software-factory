@@ -184,7 +184,7 @@ The prompt says when a run is an archive run: every numbered task in
    proposal names in its `## Autonomy` block (`issue: N`), else creates one.
 2. `gh issue edit <n> --add-label <needs_human label>`, then comment: `@<owner>` and
    the task number, what blocks it, the options you see, and your
-   recommendation. End with: "Answer here, then remove `<needs_human label>` to resume."
+   recommendation. End with: "Reply here and the factory resumes within the hour (or remove `<needs_human label>` to resume now)."
 3. If a PR already exists for the task, add the label to it as well, except
    on a per-change PR: there the tracking issue's label alone holds the change,
    so the owner's one removal resumes it.

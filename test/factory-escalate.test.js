@@ -42,7 +42,7 @@ test('labels the tracking issue needs-human, then comments the task for the owne
   const body = writes[2][4];
   assert.match(body, /^@octo Task 2\.2 of `add-x` is an owner task/);
   assert.match(body, /> Rotate the vendor key/);
-  assert.match(body, /tick it in the change's task list on `main`, then remove `needs-human`/);
+  assert.match(body, /tick it in the change's task list on `main`, then reply here/);
   assert.match(body, /edits a protected path, make the edit on its own pull request/);
 });
 
@@ -59,7 +59,7 @@ test("on a per-change PR, reads the branch's task list and asks for the tick the
   assert.equal(main(['add-x', '2.2', 'feature/factory-add-x'], d), 0);
   assert.deepEqual(refs, ['feature/factory-add-x']);
   const body = calls.find((c) => c[1] === 'comment')[4];
-  assert.match(body, /on `feature\/factory-add-x`, then remove/);
+  assert.match(body, /on `feature\/factory-add-x`, then reply here/);
   assert.equal(main(['add-x', '2.2', 'x;rm -rf'], d), 2, 'unsafe branch rejected');
 });
 
@@ -132,5 +132,5 @@ test('the configured owner, label and default branch are used', () => {
   assert.ok(calls.find((c) => c[1] === 'list').includes('bot-add-x'));
   const body = calls.find((c) => c[1] === 'comment')[4];
   assert.match(body, /^@boss /);
-  assert.match(body, /on `trunk`, then remove `stuck`/);
+  assert.match(body, /on `trunk`, then reply here and the factory resumes within the hour/);
 });
