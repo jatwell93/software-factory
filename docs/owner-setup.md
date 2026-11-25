@@ -79,7 +79,7 @@ Two things to check for each bot:
     cursor: Cursor Bugbot
   ```
 
-  Use the check name exactly as the pull request's checks list shows it. A bot with no entry is waited for as before. If a bot has neither comments nor a check run, leave it out of `review_bots` or lower `reviews_timeout_minutes`: its findings still start a babysit pass.
+  Use the check name exactly as the pull request's checks list shows it. A bot with no entry is waited for as before. `factory doctor` checks every entry: it warns about a bot that is not in `review_bots`, and about a check name that appeared on none of the last 30 merged pull requests (a typo, or a bot not installed here). Run it after any bot change. If a bot has neither comments nor a check run, leave it out of `review_bots` or lower `reviews_timeout_minutes`: its findings still start a babysit pass.
 
 - **Does it comment on every push?** A bot that reviews only the first push of a pull request leaves a later push waiting for a review that will not come. Same remedy.
 
