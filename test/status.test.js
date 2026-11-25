@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { verdict, status } = require('../lib/status.js');
-const { listOpenPrs, OPEN_LIMIT } = require('../scripts/factory-status.js');
+const { listOpenPrs, listEscalations, OPEN_LIMIT } = require('../scripts/factory-status.js');
 
 const NOW = Date.parse('2026-11-25T10:00:00Z');
 const report = (over = {}) => ({
@@ -132,6 +132,51 @@ test('the open PR list asks for 100, sorts oldest first, and says when it hit th
   assert.equal(lines.length, 0);
   listOpenPrs(gh(OPEN_LIMIT), (m) => lines.push(m));
   assert.match(lines[0], /first 100 open pull requests only/);
+});
+
+const parked = [
+  { number: 12, title: 'protected path', kind: 'issue' },
+  { number: 9, title: 'stuck run', kind: 'PR' },
+];
+
+test('a listing ends with what waits on the owner, even when no PR is open', () => {
+  const lines = [];
+  status({}, { ...io({ 7: report() }, lines), listEscalations: () => parked });
+  assert.equal(lines[1], '');
+  assert.equal(lines[2], 'waiting on you (needs-human):');
+  assert.equal(lines[3], '  issue #12: protected path');
+  assert.equal(lines[4], '  PR #9: stuck run');
+  const empty = [];
+  assert.equal(status({}, { ...io({}, empty), listEscalations: () => parked }), 0);
+  assert.equal(empty[0], 'no open pull requests');
+  assert.equal(empty[2], 'waiting on you (needs-human):');
+});
+
+test('no escalations adds nothing, and a single PR never lists them', () => {
+  const lines = [];
+  status({}, { ...io({ 7: report() }, lines), listEscalations: () => [] });
+  assert.equal(lines.length, 1);
+  const one = [];
+  status({ pr: 7 }, { ...io({ 7: report() }, one), listEscalations: () => parked });
+  assert.equal(one.length, 1);
+});
+
+test('escalations are the open issues and PRs with the needs-human label, oldest first', () => {
+  const calls = [];
+  const gh = (args) => {
+    calls.push(args.join(' '));
+    return JSON.stringify(
+      args[0] === 'issue' ? [{ number: 12, title: 'a' }] : [{ number: 9, title: 'b' }],
+    );
+  };
+  assert.deepEqual(listEscalations(gh, 'needs-human'), [
+    { number: 9, title: 'b', kind: 'PR' },
+    { number: 12, title: 'a', kind: 'issue' },
+  ]);
+  assert.deepEqual(calls, [
+    'issue list --state open --label needs-human --limit 100 --json number,title',
+    'pr list --state open --label needs-human --limit 100 --json number,title',
+  ]);
 });
 
 test('no open PRs says so', () => {
