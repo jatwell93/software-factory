@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
-const { probeBots, botFinding } = require('../lib/bot-probe.js');
+const { probeBots, botFinding, probeChecks, checkMapFinding } = require('../lib/bot-probe.js');
 const { runInit } = require('../lib/init.js');
 const { runDoctor } = require('../lib/doctor.js');
 
@@ -76,6 +76,26 @@ test('a bot with no post in a large sample warns, with both ways out', () => {
   assert.match(f.fix, /installed on this repository/);
   assert.match(f.fix, /remove it from review_bots/);
   assert.match(f.fix, /lower reviews_timeout_minutes/);
+});
+
+test('a bot with a mapped check is not called silent for posting nothing', () => {
+  const probe = { sampled: 30, bots: [{ bot: 'sentry', posted: 0 }] };
+  const via = botFinding(probe, { mapped: ['Sentry'] });
+  assert.equal(via.status, 'ok');
+  assert.match(via.detail, /settles on its mapped check, so no PR waits for a post/);
+  assert.doesNotMatch(via.detail, /waits up to/);
+  const mixed = botFinding(
+    {
+      sampled: 30,
+      bots: [
+        { bot: 'sentry', posted: 2 },
+        { bot: 'cursor', posted: 3 },
+      ],
+    },
+    { mapped: ['sentry'] },
+  );
+  assert.match(mixed.detail, /waits up to 30 minutes for cursor$/);
+  assert.equal(botFinding(probe, { mapped: ['cursor'] }).status, 'warn');
 });
 
 test('no post in a short sample is not enough to call a bot silent', () => {
@@ -166,6 +186,126 @@ test('doctor is quiet about a project with no review bots, and asks GitHub nothi
   });
   assert.equal(botsResult(results), undefined);
   assert.deepEqual(asked, []);
+});
+
+/** A fake gh over merged PRs: `names[i]` lists the check runs (or statuses) on PR i+1. */
+function checksGh(names) {
+  const calls = [];
+  const gh = (args) => {
+    calls.push(args.join(' '));
+    return JSON.stringify(
+      names.map((list, i) => ({
+        number: i + 1,
+        statusCheckRollup: list.map((n) =>
+          n.startsWith('ctx:') ? { context: n.slice(4) } : { name: n },
+        ),
+      })),
+    );
+  };
+  return { gh, calls };
+}
+
+test('counts the merged PRs each mapped check appeared on, as a run or a status, in one call', () => {
+  const { gh, calls } = checksGh(
+    prs(10, (i) => (i < 7 ? ['Seer Code Review', 'Test'] : ['ctx:Bugbot'])),
+  );
+  assert.deepEqual(probeChecks({ sentry: 'Seer Code Review', cursor: 'Bugbot', x: 'Nope' }, gh), {
+    sampled: 10,
+    checks: [
+      { bot: 'sentry', check: 'Seer Code Review', seen: 7 },
+      { bot: 'cursor', check: 'Bugbot', seen: 3 },
+      { bot: 'x', check: 'Nope', seen: 0 },
+    ],
+  });
+  assert.deepEqual(calls, ['pr list --state merged --limit 30 --json number,statusCheckRollup']);
+});
+
+const probeOf = (sampled, ...checks) => ({
+  sampled,
+  checks: checks.map(([bot, check, seen]) => ({ bot, check, seen })),
+});
+
+test('a mapped check that appears is ok, and names a listed bot with no mapping', () => {
+  const f = checkMapFinding(probeOf(30, ['sentry', 'Seer Code Review', 28]), ['sentry', 'cursor']);
+  assert.equal(f.status, 'ok');
+  assert.match(f.detail, /Seer Code Review on 28 of 30/);
+  assert.match(f.detail, /No check mapped for cursor/);
+});
+
+test('a mapped check that never appeared warns with the name, the bot and the fix', () => {
+  const f = checkMapFinding(probeOf(30, ['cursor', 'Cursor Bugbot', 0]), ['cursor'], {
+    timeoutMinutes: 45,
+  });
+  assert.equal(f.status, 'warn');
+  assert.match(f.detail, /"Cursor Bugbot" \(cursor\) appeared on none of the last 30/);
+  assert.match(f.detail, /45 minutes/);
+  assert.match(f.fix, /exactly from a pull request's checks list/);
+});
+
+test('a mapping for a bot that is not listed warns, even with few merged PRs', () => {
+  const f = checkMapFinding(probeOf(2, ['sentry', 'Seer Code Review', 0]), ['cursor']);
+  assert.equal(f.status, 'warn');
+  assert.match(f.detail, /sentry, which is not in review_bots/);
+});
+
+test('a bot is matched to its mapping without case or the [bot] suffix', () => {
+  const f = checkMapFinding(probeOf(30, ['Sentry', 'Seer Code Review', 3]), ['sentry[bot]']);
+  assert.equal(f.status, 'ok');
+});
+
+test('too few merged PRs says nothing about a mapped check', () => {
+  assert.equal(
+    checkMapFinding(probeOf(4, ['sentry', 'Seer Code Review', 0]), ['sentry']),
+    undefined,
+  );
+});
+
+/** Append mapping lines to the config init wrote. */
+const mapChecks = (root, ...lines) =>
+  fs.appendFileSync(
+    path.join(root, 'factory.config.yml'),
+    `review_bot_checks:\n${lines.join('\n')}\n`,
+  );
+const mapResult = (results) => results.find((r) => r.name === 'review bot checks');
+
+test('doctor warns about a mapped check that never appears', () => {
+  const { root, git, ref } = project(['sentry']);
+  mapChecks(root, '  sentry: Seer Code Review');
+  const { gh } = checksGh(prs(30, () => ['Test']));
+  const both = (args) =>
+    args.join(' ').includes('statusCheckRollup')
+      ? gh(args)
+      : fakeGh(prs(30, () => ['sentry'])).gh(args);
+  const result = mapResult(runDoctor(root, { git, gh: doctorGh(ref, both) }));
+  assert.equal(result.status, 'warn');
+  assert.match(result.detail, /"Seer Code Review" \(sentry\) appeared on none/);
+});
+
+test('doctor is ok when the mapped check appears, and quiet with no mapping', () => {
+  const { root, git, ref } = project(['sentry']);
+  const { gh } = checksGh(prs(30, () => ['Seer Code Review']));
+  const both = (args) =>
+    args.join(' ').includes('statusCheckRollup')
+      ? gh(args)
+      : fakeGh(prs(30, () => ['sentry'])).gh(args);
+  assert.equal(mapResult(runDoctor(root, { git, gh: doctorGh(ref, both) })), undefined);
+  mapChecks(root, '  sentry: Seer Code Review');
+  assert.equal(mapResult(runDoctor(root, { git, gh: doctorGh(ref, both) })).status, 'ok');
+});
+
+test('doctor skips, never fails, when GitHub cannot be asked about the mapped checks', () => {
+  const { root, git, ref } = project(['sentry']);
+  mapChecks(root, '  sentry: Seer Code Review');
+  const result = mapResult(
+    runDoctor(root, {
+      git,
+      gh: doctorGh(ref, (args) => {
+        if (args.join(' ').includes('statusCheckRollup')) throw new Error('HTTP 502');
+        return fakeGh(prs(30, () => ['sentry'])).gh(args);
+      }),
+    }),
+  );
+  assert.equal(result.status, 'skip');
 });
 
 test('doctor skips, never fails, when GitHub cannot be asked about the bots', () => {
