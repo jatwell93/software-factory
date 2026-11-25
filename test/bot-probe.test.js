@@ -10,22 +10,21 @@ const { runInit } = require('../lib/init.js');
 const { runDoctor } = require('../lib/doctor.js');
 
 /**
- * A fake gh over merged PRs: `authors[i]` lists who reviewed or commented on PR i+1.
- * A review's author comes as `{login}`, as `gh pr view --json reviews,comments` gives it.
+ * A fake gh over merged PRs: `authors[i]` lists who reviewed or commented on PR i+1,
+ * the first as a review and the rest as comments, as `gh pr list --json` gives them.
  */
 function fakeGh(authors) {
   const calls = [];
   const gh = (args) => {
     calls.push(args.join(' '));
     if (args[0] === 'pr' && args[1] === 'list') {
-      return JSON.stringify(authors.map((_, i) => ({ number: i + 1 })));
-    }
-    if (args[0] === 'pr' && args[1] === 'view') {
-      const who = authors[Number(args[2]) - 1];
-      return JSON.stringify({
-        reviews: who.slice(0, 1).map((login) => ({ author: { login } })),
-        comments: who.slice(1).map((login) => ({ author: { login } })),
-      });
+      return JSON.stringify(
+        authors.map((who, i) => ({
+          number: i + 1,
+          reviews: who.slice(0, 1).map((login) => ({ author: { login } })),
+          comments: who.slice(1).map((login) => ({ author: { login } })),
+        })),
+      );
     }
     throw new Error(`unexpected gh ${args.join(' ')}`);
   };
@@ -46,40 +45,50 @@ test('counts, per bot, the merged PRs it posted on, ignoring case and the [bot] 
   });
 });
 
-test('asks for the last 10 merged PRs and reads each once', () => {
+test('asks for the last 30 merged PRs with reviews and comments, in one call', () => {
   const { gh, calls } = fakeGh(prs(4, () => ['sentry']));
   probeBots(['sentry'], gh);
-  assert.match(calls[0], /^pr list --state merged --limit 10 --json number$/);
-  assert.equal(calls.length, 5);
+  assert.deepEqual(calls, ['pr list --state merged --limit 30 --json number,reviews,comments']);
 });
 
-test('a bot that posts on at least half the sample is fine', () => {
-  const probe = { sampled: 10, bots: [{ bot: 'sentry', posted: 5 }] };
-  assert.equal(botFinding(probe).status, 'ok');
+test('a bot that comments only on findings is reported, not warned about', () => {
+  // 6 of 40 is the measured rate of a real findings-only bot.
+  const probe = { sampled: 40, bots: [{ bot: 'sentry', posted: 6 }] };
+  const f = botFinding(probe, { timeoutMinutes: 30 });
+  assert.equal(f.status, 'ok');
+  assert.match(f.detail, /sentry on 6 of 40/);
+  assert.match(f.detail, /only on findings/);
+  assert.match(f.detail, /30 minutes/);
 });
 
-test('a bot that posts on fewer than half is named with the count and both ways out', () => {
+test('a bot with no post in a large sample warns, with both ways out', () => {
   const probe = {
-    sampled: 10,
+    sampled: 30,
     bots: [
       { bot: 'cursor', posted: 9 },
-      { bot: 'sentry', posted: 2 },
+      { bot: 'sentry', posted: 0 },
     ],
   };
   const f = botFinding(probe, { timeoutMinutes: 30 });
   assert.equal(f.status, 'warn');
-  assert.match(f.detail, /sentry on 2 of 10/);
-  assert.doesNotMatch(f.detail, /cursor on/);
-  assert.match(f.detail, /30 minutes/);
-  assert.match(f.fix, /Remove it from review_bots/);
+  assert.match(f.detail, /sentry posted on none of the last 30/);
+  assert.doesNotMatch(f.detail, /cursor posted on none/);
+  assert.match(f.fix, /installed on this repository/);
+  assert.match(f.fix, /remove it from review_bots/);
   assert.match(f.fix, /lower reviews_timeout_minutes/);
 });
 
-test('too few merged PRs is not judged', () => {
-  assert.equal(botFinding({ sampled: 2, bots: [{ bot: 'sentry', posted: 0 }] }), undefined);
+test('no post in a short sample is not enough to call a bot silent', () => {
+  const f = botFinding({ sampled: 10, bots: [{ bot: 'sentry', posted: 0 }] });
+  assert.equal(f.status, 'ok');
+  assert.match(f.detail, /sentry on 0 of 10/);
 });
 
-/** A project init set up, with `review_bots` added to its config. */
+test('too few merged PRs says nothing', () => {
+  assert.equal(botFinding({ sampled: 4, bots: [{ bot: 'sentry', posted: 0 }] }), undefined);
+});
+
+/** A project init set up, with `review_bots` set. */
 function project(bots) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'bot-probe-'));
   const git = (args) =>
@@ -127,14 +136,22 @@ function doctorGh(ref, probeGh) {
   };
 }
 
-test('doctor warns about a configured bot that rarely posts', () => {
+const botsResult = (results) => results.find((r) => r.name === 'review bots');
+
+test('doctor warns about a configured bot that never posted in 30 merged PRs', () => {
   const { root, git, ref } = project(['sentry', 'cursor']);
-  const { gh } = fakeGh(prs(10, (i) => (i < 2 ? ['sentry', 'cursor'] : ['cursor'])));
-  const result = runDoctor(root, { git, gh: doctorGh(ref, gh) }).find(
-    (r) => r.name === 'review bots',
-  );
+  const { gh } = fakeGh(prs(30, (i) => (i < 5 ? ['cursor'] : [])));
+  const result = botsResult(runDoctor(root, { git, gh: doctorGh(ref, gh) }));
   assert.equal(result.status, 'warn');
-  assert.match(result.detail, /sentry on 2 of 10/);
+  assert.match(result.detail, /sentry posted on none of the last 30/);
+});
+
+test('doctor reports, without warning, a bot that posts on a minority of PRs', () => {
+  const { root, git, ref } = project(['sentry']);
+  const { gh } = fakeGh(prs(30, (i) => (i < 5 ? ['sentry'] : ['copilot'])));
+  const result = botsResult(runDoctor(root, { git, gh: doctorGh(ref, gh) }));
+  assert.equal(result.status, 'ok');
+  assert.match(result.detail, /sentry on 5 of 30/);
 });
 
 test('doctor is quiet about a project with no review bots, and asks GitHub nothing about them', () => {
@@ -147,20 +164,19 @@ test('doctor is quiet about a project with no review bots, and asks GitHub nothi
       throw new Error('should not be called');
     }),
   });
-  assert.equal(
-    results.find((r) => r.name === 'review bots'),
-    undefined,
-  );
+  assert.equal(botsResult(results), undefined);
   assert.deepEqual(asked, []);
 });
 
 test('doctor skips, never fails, when GitHub cannot be asked about the bots', () => {
   const { root, git, ref } = project(['sentry']);
-  const result = runDoctor(root, {
-    git,
-    gh: doctorGh(ref, () => {
-      throw new Error('HTTP 502');
+  const result = botsResult(
+    runDoctor(root, {
+      git,
+      gh: doctorGh(ref, () => {
+        throw new Error('HTTP 502');
+      }),
     }),
-  }).find((r) => r.name === 'review bots');
+  );
   assert.equal(result.status, 'skip');
 });
