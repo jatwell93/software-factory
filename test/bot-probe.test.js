@@ -80,7 +80,21 @@ test('a bot with no post in a large sample warns, with both ways out', () => {
 
 test('a bot with a mapped check is not called silent for posting nothing', () => {
   const probe = { sampled: 30, bots: [{ bot: 'sentry', posted: 0 }] };
-  assert.equal(botFinding(probe, { mapped: ['Sentry'] }).status, 'ok');
+  const via = botFinding(probe, { mapped: ['Sentry'] });
+  assert.equal(via.status, 'ok');
+  assert.match(via.detail, /settles on its mapped check, so no PR waits for a post/);
+  assert.doesNotMatch(via.detail, /waits up to/);
+  const mixed = botFinding(
+    {
+      sampled: 30,
+      bots: [
+        { bot: 'sentry', posted: 2 },
+        { bot: 'cursor', posted: 3 },
+      ],
+    },
+    { mapped: ['sentry'] },
+  );
+  assert.match(mixed.detail, /waits up to 30 minutes for cursor$/);
   assert.equal(botFinding(probe, { mapped: ['cursor'] }).status, 'warn');
 });
 
