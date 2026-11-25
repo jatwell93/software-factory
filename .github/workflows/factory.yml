@@ -18,7 +18,10 @@ name: Factory (reusable)
 #   hourly schedule                        -> the one retry of a failed run:
 #                                             babysit-pr if the change has an open
 #                                             factory PR, else run-spec; then the
-#                                             sweep of per-change PRs
+#                                             sweep of per-change PRs, and the
+#                                             requeue: an owner comment newer
+#                                             than needs-human removes the label
+#                                             and dispatches the change
 #
 # A change with `pr: per-change` in its Autonomy block keeps every task on one
 # PR. Each event on that PR advances it one step: a babysit pass, the next task
@@ -185,6 +188,47 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node .software-factory/scripts/factory-sweep.js
+
+  requeue:
+    name: Resume the changes the owner has answered
+    needs: route
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # issues: write to remove needs-human; actions: write for `gh workflow run`.
+    # No Claude run happens in this job.
+    permissions:
+      contents: read
+      issues: write
+      actions: write
+    steps:
+      # The default branch's copy, like the route job: no Claude run and no PR code here.
+      - name: Checkout the default branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.route.outputs.default_branch }}
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ needs.route.outputs.node_version }}
+
+      - name: Checkout the factory at the pinned ref
+        uses: actions/checkout@v7
+        with:
+          repository: jatwell93/software-factory
+          ref: ${{ inputs.factory_ref }}
+          path: .software-factory
+          persist-credentials: false
+
+      - name: Install the factory's dependencies
+        run: npm ci --omit=dev --prefix .software-factory
+
+      - name: Remove needs-human where the owner has commented, and resume
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node .software-factory/scripts/factory-requeue.js
 
   run:
     name: Run one task, one archive or one babysit pass

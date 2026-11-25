@@ -77,7 +77,7 @@ function fail(id, url, ctx, log) {
         `- first: ${first}`,
         `- retry: ${url}`,
         '',
-        `The factory will not retry again. Look at the runs, fix the cause, then remove \`${labels.needs_human}\` to resume.`,
+        `The factory will not retry again. Look at the runs, fix the cause, then reply here and the factory resumes within the hour (or remove \`${labels.needs_human}\` to resume now).`,
       ].join('\n'),
     ]);
     log(`Retry of ${id} failed; escalated on #${number}.`);

@@ -62,7 +62,7 @@ If a session ran long and you want to stop mid-change, ask Claude to write the h
 
 ## Needs-human
 
-The factory stops and mentions you when it hits a question, an owner task, or two failed runs. Answer in a comment, do the owner task, then **remove the `needs-human` label**. The factory carries on from there. [More cases](factory-guide.md#when-it-stops).
+The factory stops and mentions you when it hits a question, an owner task, or two failed runs. Do the owner task if there is one, then **reply on the tracking issue**. Within the hour the factory removes `needs-human` itself and carries on (to go at once, remove the label yourself). Only your comments count, and only on the tracking issue. If you replied but the owner task is still unticked, the factory asks again. [More cases](factory-guide.md#when-it-stops).
 
 An owner task that edits a protected path (`.github/**`, `factory.config.yml`, and so on) goes on [its own pull request](owner-setup.md#owner-tasks-that-edit-a-protected-path).
 
