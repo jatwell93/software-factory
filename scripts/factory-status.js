@@ -40,6 +40,26 @@ function listOpenPrs(gh, log) {
   return rows;
 }
 
+/** Open issues and PRs carrying the needs-human label, oldest first. */
+function listEscalations(gh, label) {
+  const find = (kind) =>
+    JSON.parse(
+      gh([
+        kind,
+        'list',
+        '--state',
+        'open',
+        '--label',
+        label,
+        '--limit',
+        '100',
+        '--json',
+        'number,title',
+      ]),
+    ).map((row) => ({ ...row, kind: kind === 'pr' ? 'PR' : 'issue' }));
+  return [...find('issue'), ...find('pr')].sort((a, b) => a.number - b.number);
+}
+
 function main(argv = process.argv.slice(2), root = process.cwd(), log = console.log, io) {
   if (argv.length > 1 || (argv[0] && !/^#?\d+$/.test(argv[0]))) {
     throw usage('usage: factory-status.js [<pr-number>]');
@@ -51,6 +71,7 @@ function main(argv = process.argv.slice(2), root = process.cwd(), log = console.
     { pr: argv[0] ? Number(argv[0].replace('#', '')) : 0 },
     {
       listOpen: () => listOpenPrs(gh, log),
+      listEscalations: config ? () => listEscalations(gh, config.labels.needs_human) : undefined,
       view: (number) => JSON.parse(gh(['pr', 'view', String(number), '--json', 'number,title'])),
       report: (number) => fetchReport(number, options),
       bots: config ? config.review_bots || [] : [],
@@ -63,4 +84,4 @@ function main(argv = process.argv.slice(2), root = process.cwd(), log = console.
 
 if (require.main === module) runCli(main);
 
-module.exports = { main, listOpenPrs, OPEN_LIMIT };
+module.exports = { main, listOpenPrs, listEscalations, OPEN_LIMIT };
