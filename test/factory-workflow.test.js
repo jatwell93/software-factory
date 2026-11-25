@@ -19,6 +19,7 @@ const REF = 'b'.repeat(40);
 const config = loadConfig(tempRoot());
 const CALLER = YAML.parse(renderCaller('factory.yml', { factoryRef: REF, config }));
 const { route, sweep, run, escalate, report } = WORKFLOW.jobs;
+const lateComment = WORKFLOW.jobs['late-comment'];
 
 const stepNames = (job) => job.steps.map((s) => s.name);
 const indexOfStep = (job, text) => job.steps.findIndex((s) => (s.name || '').includes(text));
@@ -157,7 +158,7 @@ test('the factory runs from outside the working tree in the run job, inside it i
   assert.match(runText(run), /node "\$FACTORY_DIR\/scripts\/factory-check-change\.js"/);
   assert.doesNotMatch(runText(run), /node \.software-factory/, 'no copy the agent could edit');
   assert.match(runText(run), /npm ci --omit=dev --prefix \.software-factory/);
-  for (const job of [route, sweep, escalate, report]) {
+  for (const job of [route, sweep, escalate, lateComment, report]) {
     for (const m of runText(job).matchAll(/node (\S+)/g)) {
       assert.match(m[1], /^\.software-factory\/scripts\//, m[1]);
     }
@@ -168,7 +169,7 @@ test('every factory checkout is at the pin, into .software-factory, without cred
   const checkouts = Object.values(WORKFLOW.jobs)
     .flatMap((job) => job.steps)
     .filter((s) => /^actions\/checkout@/.test(s.uses) && s.with.repository);
-  assert.equal(checkouts.length, 5);
+  assert.equal(checkouts.length, 6);
   for (const step of checkouts) {
     assert.equal(step.with.repository, 'jatwell93/software-factory');
     assert.equal(step.with.ref, '${{ inputs.factory_ref }}');
@@ -178,7 +179,7 @@ test('every factory checkout is at the pin, into .software-factory, without cred
 });
 
 test('the jobs that run no agent check out the default branch, never the PR', () => {
-  for (const job of [route, sweep, escalate, report]) {
+  for (const job of [route, sweep, escalate, lateComment, report]) {
     const own = job.steps.find((s) => /^actions\/checkout@/.test(s.uses) && !s.with.repository);
     assert.match(own.with.ref, /default_branch/);
     assert.equal(own.with['persist-credentials'], false);
@@ -186,6 +187,16 @@ test('the jobs that run no agent check out the default branch, never the PR', ()
   const code = run.steps[0];
   assert.equal(code.with.ref, '${{ needs.route.outputs.ref }}');
   assert.equal(code.with['fetch-depth'], 0);
+});
+
+test('the late-comment job runs no agent, holds no Claude token, and queues per PR', () => {
+  assert.equal(lateComment.needs, 'route');
+  assert.equal(lateComment.if, "needs.route.outputs.mode == 'late-comment'");
+  assert.equal(lateComment.concurrency['cancel-in-progress'], false);
+  assert.match(lateComment.concurrency.group, /factory-late-.*route\.outputs\.pr/);
+  assert.match(runText(lateComment), /node \.software-factory\/scripts\/factory-late-comment\.js/);
+  assert.doesNotMatch(JSON.stringify(lateComment), /claude-code-action|CLAUDE_CODE_OAUTH_TOKEN/);
+  assert.doesNotMatch(run.if, /late-comment/, 'a late comment never starts a Claude run');
 });
 
 test('the sweep is its own job after the router, so its failure skips no run', () => {
