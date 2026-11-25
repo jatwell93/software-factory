@@ -443,7 +443,9 @@ jobs:
     if: needs.route.outputs.mode == 'late-comment'
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # One at a time per PR, so two findings never both open the issue.
+    # One at a time per PR, so two runs never both open the issue. GitHub keeps only
+    # one PENDING run per group and cancels the older ones; that loses nothing,
+    # because each run records every late comment on the PR, not only its own.
     concurrency:
       group: ${{ format('factory-late-{0}', needs.route.outputs.pr) }}
       cancel-in-progress: false
