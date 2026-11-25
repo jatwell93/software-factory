@@ -11,7 +11,9 @@
  *
  * The dispatch is needed because a label removed with the workflow's token starts
  * no workflow run, so the router never sees an `unlabeled` event. If the dispatch
- * fails the label goes back, so the change is never left unlabelled and idle.
+ * fails the label goes back, so the change is never left unlabelled and idle. The failure is noted
+ * on the issue with a hidden marker, so next hour retries although the restored label is
+ * newer than the owner's reply.
  *
  * Only the owner's comments count, and only on tracking issues (an open issue
  * labelled <prefix><id>). If the answer was "I did the owner task" but the task is
@@ -39,11 +41,26 @@ function labelledAt(gh, n, label) {
   return added.length ? Date.parse(added.at(-1).created_at) : 0;
 }
 
-/** True when the owner commented on issue `n` after `since` (ms). */
-function ownerReplied(gh, n, owner, since) {
-  return pages(gh, `repos/{owner}/{repo}/issues/${n}/comments`).some(
-    (c) => c.user?.login?.toLowerCase() === owner.toLowerCase() && Date.parse(c.created_at) > since,
+// Hidden markers on the factory's own comments. A failed resume puts the label back,
+// which stamps a new label time later than the owner's reply; the marker is how the
+// next run knows that reply still stands.
+const RESUMED = '<!-- factory-requeue:resumed -->';
+const FAILED = '<!-- factory-requeue:failed -->';
+
+const isOwner = (c, owner) => c.user?.login?.toLowerCase() === owner.toLowerCase();
+
+/** True when the owner commented after `since` (ms). */
+const ownerReplied = (comments, owner, since) =>
+  comments.some((c) => isOwner(c, owner) && Date.parse(c.created_at) > since);
+
+/** The last marker the factory left (never the owner's), or ''. */
+function lastMarker(comments, owner) {
+  const marked = comments.filter(
+    (c) => !isOwner(c, owner) && (c.body?.includes(RESUMED) || c.body?.includes(FAILED)),
   );
+  const last = marked.at(-1);
+  if (!last) return '';
+  return last.body.includes(FAILED) ? FAILED : RESUMED;
 }
 
 /**
@@ -68,28 +85,29 @@ function requeue(config, gh, log) {
       'number,labels',
     ]),
   );
+  const comment = (n, body) => gh(['issue', 'comment', String(n), '--body', body]);
   const resumed = [];
+  let failure = null;
   for (const issue of parked) {
     const id = changeFromLabels(issue.labels || []);
     if (!id) continue;
-    const since = labelledAt(gh, issue.number, labels.needs_human);
-    if (!since) {
-      log(`#${issue.number}: no needs-human label event found, left alone`);
-      continue;
+    const n = issue.number;
+    const comments = pages(gh, `repos/{owner}/{repo}/issues/${n}/comments`);
+    // A resume that failed last hour left the label back on; the owner's reply stands.
+    const retrying = lastMarker(comments, owner) === FAILED;
+    if (!retrying) {
+      const since = labelledAt(gh, n, labels.needs_human);
+      if (!since) {
+        log(`#${n}: no needs-human label event found, left alone`);
+        continue;
+      }
+      if (!ownerReplied(comments, owner, since)) {
+        log(`#${n}: waiting on the owner`);
+        continue;
+      }
     }
-    if (!ownerReplied(gh, issue.number, owner, since)) {
-      log(`#${issue.number}: waiting on the owner`);
-      continue;
-    }
-    gh(['issue', 'edit', String(issue.number), '--remove-label', labels.needs_human]);
+    gh(['issue', 'edit', String(n), '--remove-label', labels.needs_human]);
     try {
-      gh([
-        'issue',
-        'comment',
-        String(issue.number),
-        '--body',
-        `Resuming \`${id}\`: @${owner} commented after \`${labels.needs_human}\` was added, so the label is removed.`,
-      ]);
       gh([
         'workflow',
         'run',
@@ -100,14 +118,39 @@ function requeue(config, gh, log) {
         `change_id=${id}`,
       ]);
     } catch (error) {
-      // Never leave the change unlabelled and idle.
-      gh(['issue', 'edit', String(issue.number), '--add-label', labels.needs_human]);
-      throw error;
+      failure = failure || error;
+      restore(n, error, retrying);
+      continue;
     }
-    log(`#${issue.number}: resumed ${id}`);
-    resumed.push(issue.number);
+    // Said only once the dispatch worked; a failure of the note itself costs nothing.
+    try {
+      comment(
+        n,
+        `Resuming \`${id}\`: @${owner} replied after \`${labels.needs_human}\` was added, so the label is removed and the factory is running.\n${RESUMED}`,
+      );
+    } catch (error) {
+      log(`#${n}: resumed, but the note failed: ${error.message}`);
+    }
+    log(`#${n}: resumed ${id}`);
+    resumed.push(n);
   }
+  if (failure) throw failure;
   return resumed;
+
+  /** Put the label back so the change is never left unlabelled and idle; try again next hour. */
+  function restore(n, error, alreadyFlagged) {
+    try {
+      gh(['issue', 'edit', String(n), '--add-label', labels.needs_human]);
+      if (!alreadyFlagged) {
+        comment(
+          n,
+          `Could not resume this change (${String(error.message).split('\n')[0]}). The label is back; the factory tries again next hour.\n${FAILED}`,
+        );
+      }
+    } catch (again) {
+      log(`#${n}: could not put ${labels.needs_human} back: ${again.message}`);
+    }
+  }
 }
 
 function main(io = {}) {
