@@ -131,6 +131,7 @@ function project(bots) {
 function doctorGh(ref, probeGh) {
   const replies = {
     [`api repos/jatwell93/software-factory/commits/${ref} --jq .sha`]: ref,
+    [`api repos/jatwell93/software-factory/compare/${ref}...main --jq .ahead_by`]: '0',
     'label list --limit 200 --json name --jq .[].name':
       'factory-ready\nneeds-human\nfactory-retry\nfactory-retrying\nfactory-digest',
     'secret list --json name --jq .[].name': 'CLAUDE_CODE_OAUTH_TOKEN',

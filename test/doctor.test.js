@@ -54,6 +54,7 @@ function initialised(ref = SHA) {
 function healthyGh(over = {}) {
   const replies = {
     [`api repos/${REPO}/commits/${SHA} --jq .sha`]: SHA,
+    [`api repos/${REPO}/compare/${SHA}...main --jq .ahead_by`]: '0',
     'label list --limit 200 --json name --jq .[].name': LABELS.join('\n'),
     'secret list --json name --jq .[].name': 'CLAUDE_CODE_OAUTH_TOKEN',
     'repo view --json nameWithOwner --jq .nameWithOwner': 'octo/app',
@@ -81,6 +82,28 @@ test('a project init set up, in a healthy repository, has nothing to fix', () =>
   );
   assert.equal(find(results, 'config').status, 'ok');
   assert.equal(find(results, 'pin').status, 'ok');
+});
+
+test('a pin far behind the factory main warns, with the command that fixes it', () => {
+  const { root, git } = initialised();
+  const key = `api repos/${REPO}/compare/${SHA}...main --jq .ahead_by`;
+  const warned = find(runDoctor(root, { git, gh: healthyGh({ [key]: '12\n' }) }), 'pin drift');
+  assert.equal(warned.status, 'warn');
+  assert.match(warned.detail, /12 commits behind/);
+  assert.match(warned.fix, /pin-sync/);
+  const near = find(runDoctor(root, { git, gh: healthyGh({ [key]: '4' }) }), 'pin drift');
+  assert.equal(near.status, 'ok');
+  assert.match(near.detail, /4 commit\(s\) behind/);
+  assert.equal(find(runDoctor(root, { git, gh: healthyGh() }), 'pin drift').status, 'ok');
+});
+
+test('pin drift is a skip, never a fail, when GitHub cannot say', () => {
+  const { root, git } = initialised();
+  const key = `api repos/${REPO}/compare/${SHA}...main --jq .ahead_by`;
+  const results = runDoctor(root, { git, gh: healthyGh({ [key]: new Error('HTTP 502') }) });
+  assert.equal(find(results, 'pin drift').status, 'skip');
+  const odd = runDoctor(root, { git, gh: healthyGh({ [key]: 'nope' }) });
+  assert.equal(find(odd, 'pin drift').status, 'skip');
 });
 
 test('a missing or invalid config is the only result', () => {
