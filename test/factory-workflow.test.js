@@ -286,3 +286,10 @@ test('the requeue job runs on the schedule only, runs no agent, and may edit iss
   assert.ok(runText(requeue).includes('factory-requeue.js'));
   assert.ok(!requeue.steps.some((s) => /claude-code-action/.test(s.uses || '')));
 });
+
+test('the sweep job flags stuck PRs before it dispatches, so a flagged PR is skipped', () => {
+  const flag = indexOfStep(sweep, 'Flag the factory PRs that are stuck');
+  const dispatch = indexOfStep(sweep, 'Dispatch a run');
+  assert.ok(flag !== -1 && flag < dispatch);
+  assert.ok(sweep.steps[flag].run.includes('factory-stalled.js'));
+});
