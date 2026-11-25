@@ -21,7 +21,8 @@ const { createRouter } = require('../lib/router.js');
 const { stallReason, stallComment } = require('../lib/stalled.js');
 const { fetchReport } = require('./pr-feedback.js');
 
-const defaultGh = (args) => execFileSync('gh', args, { encoding: 'utf8' });
+const defaultGh = (args) =>
+  execFileSync('gh', args, { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
 
 /**
  * @returns {number[]} The PR numbers flagged.

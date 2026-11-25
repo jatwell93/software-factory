@@ -190,7 +190,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node .software-factory/scripts/factory-stalled.js
 
+      # Runs even when the flagging step failed: one PR that cannot be flagged must not
+      # stop the others from moving on. The job still ends red, so the failure shows.
       - name: Dispatch a run for each per-change PR with a step to take
+        if: ${{ !cancelled() }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node .software-factory/scripts/factory-sweep.js

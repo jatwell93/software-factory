@@ -34,7 +34,14 @@ test('a recent PR is not stuck and costs no report', () => {
 test('an idle PR is stuck on failing or unfinished checks, or unresolved review items', () => {
   const pr = { mergeable: 'MERGEABLE', updatedAt: hoursAgo(30) };
   const why = (over) => stallReason(pr, () => report(over), NOW);
-  assert.match(why({ checks: { fail: ['Test'], pending: [] } }), /30 hours.*checks failing: Test/);
+  // The real report counts a failing check in `actionable`, so it must not read as a review item.
+  const failing = why({ checks: { fail: ['Test'], pending: [] }, actionable: 1 });
+  assert.match(failing, /30 hours.*checks failing: Test/);
+  assert.doesNotMatch(failing, /review item/);
+  assert.match(
+    why({ checks: { fail: ['Test'], pending: [] }, actionable: 3 }),
+    /checks failing: Test; 2 unresolved review item/,
+  );
   assert.match(why({ checks: { fail: [], pending: ['Build'] } }), /checks never finished: Build/);
   assert.match(why({ actionable: 2 }), /2 unresolved review item/);
   assert.match(why({ settled: false, waitingOn: ['quiet window'] }), /waiting on quiet window/);

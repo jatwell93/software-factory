@@ -293,3 +293,8 @@ test('the sweep job flags stuck PRs before it dispatches, so a flagged PR is ski
   assert.ok(flag !== -1 && flag < dispatch);
   assert.ok(sweep.steps[flag].run.includes('factory-stalled.js'));
 });
+
+test('the dispatch step still runs when the flagging step failed', () => {
+  const dispatch = sweep.steps[indexOfStep(sweep, 'Dispatch a run')];
+  assert.equal(dispatch.if, '${{ !cancelled() }}');
+});
