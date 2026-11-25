@@ -295,6 +295,7 @@ function summarize(
     lastPushAt: lastPushAt(head, rows),
     posters: postersOf(pr),
     checks,
+    finishedChecks: rows.filter((row) => row.bucket !== 'pending').map((row) => row.name),
     settled: waitingOn.length === 0,
     waitingOn,
     quietUntil,

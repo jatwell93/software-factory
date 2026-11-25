@@ -54,6 +54,7 @@ function main(argv = process.argv.slice(2), root = process.cwd(), log = console.
       view: (number) => JSON.parse(gh(['pr', 'view', String(number), '--json', 'number,title'])),
       report: (number) => fetchReport(number, options),
       bots: config ? config.review_bots || [] : [],
+      botChecks: config ? config.review_bot_checks || {} : {},
       log,
       ...io,
     },

@@ -70,7 +70,17 @@ To switch, say from Sentry to Cursor Bugbot or CodeRabbit:
 
 Two things to check for each bot:
 
-- **Does it post when it finds nothing?** The factory counts a bot as having posted only when it leaves a review, a comment or a thread. A bot that reports only through a check run, or comments only when it finds a problem, never counts, so every pull request waits the full timeout. Leave such a bot out of `review_bots`: when it does comment, its findings still start a babysit pass, it just cannot hold the status. Or lower `reviews_timeout_minutes`.
+- **Does it post when it finds nothing?** By default the factory counts a bot as done only when it leaves a review, a comment or a thread. A bot that comments only when it finds a problem then makes every clean pull request wait the full timeout. Name the check run it finishes on every pull request in `review_bot_checks` and the factory counts the bot as done when that check has finished (passed, failed or skipped):
+
+  ```yaml
+  review_bots: [sentry, cursor]
+  review_bot_checks:
+    sentry: Seer Code Review
+    cursor: Cursor Bugbot
+  ```
+
+  Use the check name exactly as the pull request's checks list shows it. A bot with no entry is waited for as before. If a bot has neither comments nor a check run, leave it out of `review_bots` or lower `reviews_timeout_minutes`: its findings still start a babysit pass.
+
 - **Does it comment on every push?** A bot that reviews only the first push of a pull request leaves a later push waiting for a review that will not come. Same remedy.
 
 `doctor` does not check the bot logins: a wrong login means a wait until the timeout and nothing worse.

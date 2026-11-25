@@ -71,6 +71,13 @@
       "minItems": 1,
       "uniqueItems": true
     },
+    "review_bot_checks": {
+      "description": "Optional. For a bot in `review_bots` that comments only on findings, the name of the check run it finishes on every pull request (for example sentry: Seer Code Review). `factory/reviews-settled` then counts the bot as done when it has posted or that check has finished (passed, failed or skipped), instead of waiting `reviews_timeout_minutes` for a post that never comes. A bot with no entry is waited for as before.",
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z0-9][a-z0-9-]*$" },
+      "additionalProperties": { "type": "string", "minLength": 1 },
+      "default": {}
+    },
     "reviews_timeout_minutes": {
       "description": "How long after the last push factory/reviews-settled waits for a configured bot before it turns to success.",
       "type": "integer",
