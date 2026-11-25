@@ -29,6 +29,17 @@ const run = (cmd, cwd) => (args) =>
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
+const OPEN_LIMIT = 100;
+
+/** Open PRs, oldest first. `gh pr list` stops at 30 without --limit, so say so at the cap. */
+function listOpenPrs(gh, log) {
+  const rows = JSON.parse(
+    gh(['pr', 'list', '--state', 'open', '--limit', String(OPEN_LIMIT), '--json', 'number,title']),
+  ).sort((a, b) => a.number - b.number);
+  if (rows.length >= OPEN_LIMIT) log(`showing the first ${OPEN_LIMIT} open pull requests only`);
+  return rows;
+}
+
 function main(argv = process.argv.slice(2), root = process.cwd(), log = console.log, io) {
   if (argv.length > 1 || (argv[0] && !/^#?\d+$/.test(argv[0]))) {
     throw usage('usage: factory-status.js [<pr-number>]');
@@ -39,10 +50,7 @@ function main(argv = process.argv.slice(2), root = process.cwd(), log = console.
   return status(
     { pr: argv[0] ? Number(argv[0].replace('#', '')) : 0 },
     {
-      listOpen: () =>
-        JSON.parse(gh(['pr', 'list', '--state', 'open', '--json', 'number,title'])).sort(
-          (a, b) => a.number - b.number,
-        ),
+      listOpen: () => listOpenPrs(gh, log),
       view: (number) => JSON.parse(gh(['pr', 'view', String(number), '--json', 'number,title'])),
       report: (number) => fetchReport(number, options),
       bots: config ? config.review_bots || [] : [],
@@ -54,4 +62,4 @@ function main(argv = process.argv.slice(2), root = process.cwd(), log = console.
 
 if (require.main === module) runCli(main);
 
-module.exports = { main };
+module.exports = { main, listOpenPrs, OPEN_LIMIT };

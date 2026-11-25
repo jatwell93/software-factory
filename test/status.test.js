@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { verdict, status } = require('../lib/status.js');
+const { listOpenPrs, OPEN_LIMIT } = require('../scripts/factory-status.js');
 
 const NOW = Date.parse('2026-11-25T10:00:00Z');
 const report = (over = {}) => ({
@@ -102,6 +103,25 @@ test('with a number it exits 0 for ready or safe and 1 otherwise', () => {
     status({ pr: 7 }, io({ 7: report({ checks: { ...report().checks, pending: ['B'] } }) }, lines)),
     1,
   );
+});
+
+test('the open PR list asks for 100, sorts oldest first, and says when it hit the cap', () => {
+  const calls = [];
+  const lines = [];
+  const rows = (n) => Array.from({ length: n }, (_, i) => ({ number: n - i, title: `t${i}` }));
+  const gh = (n) => (args) => {
+    calls.push(args);
+    return JSON.stringify(rows(n));
+  };
+  const few = listOpenPrs(gh(3), (m) => lines.push(m));
+  assert.deepEqual(
+    few.map((p) => p.number),
+    [1, 2, 3],
+  );
+  assert.ok(calls[0].includes('--limit') && calls[0][calls[0].indexOf('--limit') + 1] === '100');
+  assert.equal(lines.length, 0);
+  listOpenPrs(gh(OPEN_LIMIT), (m) => lines.push(m));
+  assert.match(lines[0], /first 100 open pull requests only/);
 });
 
 test('no open PRs says so', () => {
