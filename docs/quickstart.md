@@ -1,6 +1,6 @@
 # Quickstart
 
-From an empty checkout to your first factory pull request. Allow about an hour, most of it waiting for GitHub. When the factory is running, read the [guide](factory-guide.md) for how a change flows.
+From an empty checkout to your first factory pull request. Allow about an hour, most of it waiting for GitHub. When the factory is running, the [owner guide](owner-guide.md) is your daily routine and the [factory guide](factory-guide.md) explains how a change flows.
 
 ## What you need
 
@@ -32,7 +32,7 @@ It detects your stack, your owner and default branch, and your CI workflow names
 
 If it cannot find a gate it stops and asks for one: pass `--gate "<test command>"` or `--ci-workflow "<workflow name>"`. `--dry-run` shows the plan and writes nothing. A second run changes nothing.
 
-A project with no root `package.json` (frontend and backend in subfolders, say) gets no detected gate: pass each with `--gate`, and set `runner.install` and the runtime versions in the config. `--ci-workflow` must name a workflow that really runs on pull requests: check its name under the repository's Actions tab. A workflow file GitHub cannot parse never shows up there, so the factory would wait for a CI run that never comes. `--spec-source paul` selects the [PAUL adapter](../README.md); without it you get OpenSpec.
+A project with no root `package.json` (frontend and backend in subfolders, say) gets no detected gate: pass each with `--gate`, and set `runner.install` and the runtime versions in the config. `--ci-workflow` must name a workflow that really runs on pull requests: check its name under the repository's Actions tab. A workflow file GitHub cannot parse never shows up there, so the factory would wait for a CI run that never comes. `--spec-source paul` selects the [PAUL adapter](reference.md); without it you get OpenSpec.
 
 Open `factory.config.yml` and read it before you commit. The gates are what the agent must pass before it pushes.
 
@@ -96,6 +96,7 @@ If nothing happens for a while, see [When it stops](factory-guide.md#when-it-sto
 
 ## Next
 
+- [Owner guide](owner-guide.md): the daily loop, `factory status`, weekly upkeep, swapping a review bot.
 - [The guide](factory-guide.md): the whole flow, the Autonomy block, owner tasks and what the factory will not do.
 - [Owner setup](owner-setup.md): secret, app, ruleset, approval policy, review bots.
 - `factory-upgrade.js --ref <sha|v*>` moves your pin when the factory has a new release; `doctor` tells you when the pin is a branch or an unprotected tag.

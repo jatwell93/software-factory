@@ -90,9 +90,9 @@ To pause a change on purpose, add `needs-human` to its tracking issue. To start 
 
 ## Related
 
-- [Quickstart](quickstart.md) and [owner setup](owner-setup.md).
+- [Quickstart](quickstart.md), [owner guide](owner-guide.md) (the daily routine) and [owner setup](owner-setup.md).
 - `skills/to-tickets/SKILL.md`: how the slicing and the quiz work.
-- The [README](../README.md): what each script and workflow does.
+- The [reference](reference.md): what each script and workflow does.
 
 ## A review comment after you merge
 
