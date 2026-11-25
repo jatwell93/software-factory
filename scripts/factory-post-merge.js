@@ -12,12 +12,14 @@
  * 1 the PR is not merged (yet), 2 usage error or an unreadable config.
  */
 
+const fs = require('node:fs');
+const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { runCli } = require('../lib/cli.js');
-const { loadConfig } = require('../lib/config.js');
+const { CONFIG_FILE, loadConfig } = require('../lib/config.js');
 const { usage } = require('../lib/init.js');
-const { postMerge } = require('../lib/post-merge.js');
-const { cli: cleanupCli } = require('./cleanup-merged.js');
+const { postMerge, fallbackConfig } = require('../lib/post-merge.js');
+const { main: cleanupMain } = require('./cleanup-merged.js');
 
 const run = (cmd, cwd) => (args) =>
   execFileSync(cmd, args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
@@ -26,9 +28,13 @@ function main(argv = process.argv.slice(2), root = process.cwd(), log = console.
   if (argv.length > 1 || (argv[0] && !/^#?\d+$/.test(argv[0]))) {
     throw usage('usage: factory-post-merge.js [<pr-number>]');
   }
-  const config = loadConfig(root);
   const git = run('git', root);
   const gh = run('gh', root);
+  // A project without a config (the factory's own repo, or one not set up yet) still
+  // gets post-merge, with the default branch from origin; a broken config still fails.
+  const config = fs.existsSync(path.join(root, CONFIG_FILE))
+    ? loadConfig(root)
+    : fallbackConfig(git);
   return postMerge(
     { pr: argv[0] && argv[0].replace('#', '') },
     {
@@ -36,7 +42,7 @@ function main(argv = process.argv.slice(2), root = process.cwd(), log = console.
       gh,
       config,
       log,
-      cleanup: () => cleanupCli(root, [], { log }),
+      cleanup: () => cleanupMain([], { git, gh, log, defaultBranch: config.default_branch }),
       ...io,
     },
   );
