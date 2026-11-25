@@ -119,6 +119,7 @@ function main(argv = process.argv.slice(2), io = {}) {
     const report = feedback(pr.number);
     const status = settledStatus(report, {
       bots: config.review_bots,
+      botChecks: config.review_bot_checks,
       timeoutMinutes: config.reviews_timeout_minutes,
       now,
     });

@@ -52,6 +52,16 @@ test('a configured bot that has not posted is safe, named, and not a block', () 
   assert.doesNotMatch(v.text, /sentry yet/);
 });
 
+test('a bot whose mapped check finished is not outstanding', () => {
+  const rep = report({ posters: ['sentry'], finishedChecks: ['Cursor Bugbot'] });
+  const v = verdict(rep, {
+    bots: ['sentry', 'cursor'],
+    botChecks: { cursor: 'Cursor Bugbot' },
+    now: NOW,
+  });
+  assert.equal(v.level, 'ready');
+});
+
 test('an elapsed quiet window is not outstanding', () => {
   assert.equal(
     verdict(report({ quietUntil: '2026-11-25T09:00:00Z' }), { now: NOW }).level,

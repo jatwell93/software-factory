@@ -496,6 +496,20 @@ test('a pending check of a configured workflow is listed once even when a passed
   assert.deepEqual(checks.pendingActions, ['test']);
 });
 
+test('finishedChecks names every check that is no longer pending, whatever its outcome', () => {
+  const rows = [
+    { name: 'Seer Code Review', bucket: 'pass', workflow: '' },
+    { name: 'Cursor Bugbot', bucket: 'skipping', workflow: '' },
+    { name: 'Test', bucket: 'fail', workflow: 'CI' },
+    { name: 'Build', bucket: 'pending', workflow: 'CI' },
+  ];
+  assert.deepEqual(summarize(pr(), rows, { now: NOW }).finishedChecks, [
+    'Seer Code Review',
+    'Cursor Bugbot',
+    'Test',
+  ]);
+});
+
 test('posters lists every login that posted, including one whose thread is resolved', () => {
   const report = summarize(
     pr({

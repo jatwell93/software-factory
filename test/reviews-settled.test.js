@@ -48,8 +48,43 @@ test('the status is success once the quiet window is over and every bot has post
   );
   assert.deepEqual(s, {
     state: 'success',
-    description: 'Quiet window over; all 2 review bot(s) have posted',
+    description: 'Quiet window over; all 2 review bot(s) have reported',
   });
+});
+
+test('a bot whose mapped check has finished counts as reported without posting', () => {
+  const botChecks = { sentry: 'Seer Code Review' };
+  const rep = report({
+    posters: ['copilot-pull-request-reviewer'],
+    finishedChecks: ['Seer Code Review'],
+  });
+  const s = settledStatus(rep, { ...options(at(5)), botChecks });
+  assert.equal(s.state, 'success');
+  assert.match(s.description, /all 2 review bot\(s\) have reported/);
+});
+
+test('a mapped check that is still running, or absent, does not count', () => {
+  const botChecks = { sentry: 'Seer Code Review' };
+  const base = { posters: ['copilot-pull-request-reviewer'] };
+  for (const finishedChecks of [[], ['Test']]) {
+    const s = settledStatus(report({ ...base, finishedChecks }), { ...options(at(5)), botChecks });
+    assert.deepEqual(s, { state: 'pending', description: 'Waiting on: sentry' });
+  }
+});
+
+test('a finished check counts only for the bot it is mapped to', () => {
+  const rep = report({ posters: [], finishedChecks: ['Seer Code Review'] });
+  assert.deepEqual(missingBots(rep, BOTS, { sentry: 'Seer Code Review' }), [
+    'copilot-pull-request-reviewer',
+  ]);
+  assert.deepEqual(missingBots(rep, BOTS, {}), BOTS);
+  assert.deepEqual(missingBots(rep, ['constructor'], {}), ['constructor']);
+});
+
+test('the script reads review_bot_checks from the config', () => {
+  const cfg = configWith('review_bots: [sentry]', 'review_bot_checks: {sentry: Seer Code Review}');
+  assert.deepEqual(cfg.review_bot_checks, { sentry: 'Seer Code Review' });
+  assert.deepEqual(configWith('review_bots: [sentry]').review_bot_checks, {});
 });
 
 test('with no review bots configured, the quiet window alone settles it', () => {
@@ -158,7 +193,7 @@ test('the script posts the status on the head of each open factory PR only', () 
   assert.ok(post.includes(`context=${CONTEXT}`) && post.includes('state=success'));
   assert.equal(posts(calls).length, 1);
   assert.deepEqual(lines, [
-    '#9: success (Quiet window over; all 1 review bot(s) have posted)',
+    '#9: success (Quiet window over; all 1 review bot(s) have reported)',
     '#9: asked the factory for a pass',
   ]);
 });
