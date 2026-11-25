@@ -93,3 +93,7 @@ To pause a change on purpose, add `needs-human` to its tracking issue. To start 
 - [Quickstart](quickstart.md) and [owner setup](owner-setup.md).
 - `skills/to-tickets/SKILL.md`: how the slicing and the quiz work.
 - The [README](../README.md): what each script and workflow does.
+
+## A review comment after you merge
+
+If a bot or reviewer comments on a PR after it merged, no babysit pass will read it. The factory opens one issue per merged PR, titled `Late review comments on #N: <title>`, and adds any later comment to it. It mentions the owner and quotes the comment (with `@names` defanged). Only a top-level inline comment, or a review that asks for changes, counts; the owner, the factory app and `github-actions[bot]` are ignored. No Claude run is spent: the `late-comment` job runs a script. Close the issue when you have dealt with it, or hand it to the factory as a change.

@@ -13,6 +13,8 @@ name: Factory (reusable)
 #     change's tracking issue
 #   any task route whose next task is      -> escalate job, no Claude run
 #     marked (owner)
+#   review comment on a PR already merged  -> late-comment job, no Claude run: one
+#     (any PR)                                follow-up issue per merged PR
 #   hourly schedule                        -> the one retry of a failed run:
 #                                             babysit-pr if the change has an open
 #                                             factory PR, else run-spec; then the
@@ -434,6 +436,45 @@ jobs:
           # The PR branch, for a per-change PR: its task list has the task.
           REF: ${{ needs.route.outputs.per_change == 'true' && needs.route.outputs.ref || '' }}
         run: node .software-factory/scripts/factory-escalate.js "$CHANGE_ID" "$TASK" ${REF:+"$REF"}
+
+  late-comment:
+    name: Open a follow-up issue for a review comment after the merge
+    needs: route
+    if: needs.route.outputs.mode == 'late-comment'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # One at a time per PR, so two findings never both open the issue.
+    concurrency:
+      group: ${{ format('factory-late-{0}', needs.route.outputs.pr) }}
+      cancel-in-progress: false
+    steps:
+      # The default branch's copy, like the route job: no Claude run and no PR code here.
+      - name: Checkout the default branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.route.outputs.default_branch }}
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ needs.route.outputs.node_version }}
+
+      - name: Checkout the factory at the pinned ref
+        uses: actions/checkout@v7
+        with:
+          repository: jatwell93/software-factory
+          ref: ${{ inputs.factory_ref }}
+          path: .software-factory
+          persist-credentials: false
+
+      - name: Install the factory's dependencies
+        run: npm ci --omit=dev --prefix .software-factory
+
+      - name: Open or update the follow-up issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node .software-factory/scripts/factory-late-comment.js
 
   report:
     name: Record the run for a retry
