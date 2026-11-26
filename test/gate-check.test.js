@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
-const { staticGateProblems, tryGates } = require('../lib/gate-check.js');
+const { defaultRunGate, staticGateProblems, tryGates } = require('../lib/gate-check.js');
 const { runDoctor } = require('../lib/doctor.js');
 const { runInit } = require('../lib/init.js');
 const { main } = require('../scripts/factory-doctor.js');
@@ -34,8 +34,45 @@ test('tsc from a root with no tsconfig.json is a problem, naming the folder that
   assert.match(found.problem, /tsc -p frontend/);
 });
 
+/** Installs an empty program of each name in the project's node_modules/.bin. */
+function install(root, ...names) {
+  fs.mkdirSync(path.join(root, 'node_modules', '.bin'), { recursive: true });
+  for (const name of names) {
+    fs.writeFileSync(path.join(root, 'node_modules', '.bin', name), '');
+    fs.writeFileSync(path.join(root, 'node_modules', '.bin', `${name}.cmd`), '');
+  }
+}
+
+test('commands after a cd, inside a subshell or after a pipe are read as the shell reads them', () => {
+  const root = project({ 'package.json': pkg({ test: 'echo hi' }) });
+  // The subshell cd moves everything after it; the parentheses are not part of a word.
+  assert.deepEqual(problems(root, '(cd workers && npm run typecheck)'), []);
+  assert.deepEqual(problems(root, 'cd workers && tsc --noEmit && npm run nothing'), []);
+  assert.deepEqual(problems(root, '(npm test)'), []);
+  // A command before the cd, and one on the next line, still run from the root.
+  assert.equal(problems(root, 'npm run a && cd x && npm test').length, 1);
+  assert.equal(problems(root, 'cd x && npm test\nnpm run b').length, 1);
+  // Pipes, backslash continuations and comment lines.
+  assert.equal(problems(root, 'npm test | npm run c').length, 1);
+  assert.equal(problems(root, 'npm \\\n  run d').length, 1);
+  assert.deepEqual(problems(root, '# npm run e\nnpm test'), []);
+});
+
+test('yarn runs a binary when no script has that name, and a script when one has', () => {
+  const root = project({ 'package.json': pkg({ lint: 'tsc' }), 'tsconfig.json': '{}' });
+  install(root, 'eslint', 'tsc');
+  assert.deepEqual(problems(root, 'yarn eslint .'), []);
+  assert.deepEqual(problems(root, 'yarn tsc --noEmit'), []);
+  assert.deepEqual(problems(root, 'yarn lint'), []);
+  const bare = project({ 'package.json': pkg({ lint: 'tsc' }) });
+  install(bare, 'tsc');
+  assert.match(problems(bare, 'yarn lint')[0].problem, /tsconfig\.json/);
+  assert.match(problems(bare, 'yarn run nothing')[0].problem, /no script "nothing"/);
+});
+
 test('tsc is fine with -p, --project, -b, named files, or a tsconfig.json in the root', () => {
   const root = project({ 'package.json': pkg({}) });
+  install(root, 'tsc');
   for (const run of [
     'tsc -p frontend',
     'tsc --project=frontend',
@@ -46,6 +83,7 @@ test('tsc is fine with -p, --project, -b, named files, or a tsconfig.json in the
     assert.deepEqual(problems(root, run), [], run);
   }
   const withConfig = project({ 'tsconfig.json': '{}', 'package.json': pkg({}) });
+  install(withConfig, 'tsc');
   assert.deepEqual(problems(withConfig, 'tsc --noEmit'), []);
 });
 
@@ -123,6 +161,22 @@ test('tryGates really runs a command from the root and sees its exit status', ()
   assert.equal(here.ok, true);
   assert.equal(fails.code, 3);
   assert.match(fails.error, /boom here/);
+});
+
+test('a gate whose output passes the buffer is reported with the reason, not a bare failure', () => {
+  const root = project();
+  const noisy = `node -e "process.stdout.write('x'.repeat(5000))"`;
+  const result = defaultRunGate(noisy, root, 20000, 1000);
+  assert.notEqual(result.code, 0);
+  assert.equal(result.timedOut, false);
+  assert.match(result.output, /^error: .*ENOBUFS/);
+  const [one] = tryGates(root, [{ run: noisy }], {
+    runGate: (r, d, t) => defaultRunGate(r, d, t, 1000),
+  });
+  assert.equal(one.ok, false);
+  assert.match(one.error, /ENOBUFS/);
+  // The default buffer holds ordinary output.
+  assert.equal(defaultRunGate(noisy, root, 20000).code, 0);
 });
 
 function initialised(gate) {
