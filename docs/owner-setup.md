@@ -61,6 +61,37 @@ If **Add checks** shows nothing for `factory/...`, the checks have not run yet (
 
 Do not tick **Require a pull request before merging** for this: you cannot approve your own pull request, and the factory's checks already run on every pull request.
 
+## The CI audit
+
+The agent and the review bots do not decide what may merge: the required CI checks do. They run on GitHub's runners, outside the agent's environment, with the tests and policy you chose, and the agent cannot change which of them run (the workflow that judges a factory pull request comes from the default branch). A project whose CI is one lint job passes the same green tick as one with tests and scans, so `init` and `doctor` report which kinds of audit your CI has. It reads the workflow files and your dependency-update config, runs nothing, and only warns.
+
+| Kind               | Found when a workflow contains                                                   |
+| ------------------ | -------------------------------------------------------------------------------- |
+| tests              | `npm test`, `pytest`, `go test`, `cargo test`, `make test`, vitest, jest, rspec  |
+| lint or type check | eslint, `tsc`, ruff, mypy, clippy, `go vet`, golangci-lint, `npm run lint`       |
+| security scan      | the CodeQL action, `npm audit`, Trivy, Semgrep, Bandit, `cargo audit`, pip-audit |
+| secrets scan       | gitleaks, trufflehog, detect-secrets                                             |
+| dependency updates | `.github/dependabot.yml` or a Renovate config; a cooldown is noted when missing  |
+
+A scan that runs from GitHub's settings (CodeQL's default setup) leaves no file, so it shows as missing: ignore that line.
+
+What to do about a gap depends on the project. `doctor` says which it thinks yours is: **greenfield** with no CI workflow of its own or fewer than 20 commits, **brownfield** otherwise.
+
+**Greenfield.** Require every check from the first commit; there is nothing to clear.
+
+1. Write the tests and their CI job before the first factory task. A gate that cannot fail makes every change look good, and `init` has no CI workflow to name until one exists (it asks for `--ci-workflow`).
+2. Add a job per kind above, using the tools for your stack: Node `npm test`, `npm run lint`, CodeQL (javascript-typescript), gitleaks; Python `pytest`, `ruff check .`, `mypy .`, CodeQL (python), `pip-audit`; Go `go test ./...`, `go vet ./...`, CodeQL (go); Rust `cargo test`, `cargo clippy`, `cargo audit`.
+3. Require each job: `init --apply-ruleset --ci-check <job>` for every job name in a pull request's checks list.
+4. Add a Dependabot config with a cooldown (below).
+
+**Brownfield.** Keep the CI jobs you have and add only what is missing, as separate jobs.
+
+1. Add each new scan as a check that is **not** required. It will report findings your code already has, and a required check would block every factory pull request.
+2. Clear the findings, or record them as the baseline (CodeQL and Semgrep can both baseline). Then require the job with `init --apply-ruleset --ci-check <job>`.
+3. A slow test suite is not a reason to leave it out: the factory waits for CI, and `gates` in `factory.config.yml` can run a fast subset before each push while CI runs the whole suite.
+
+**Dependency updates, both.** Configure Dependabot or Renovate to wait a few days after a release before proposing it: a compromised release is usually caught and pulled in that time. Dependabot: `cooldown: default-days: 7` under each `updates` entry; Renovate: `minimumReleaseAge: "7 days"`. Group routine minor and patch bumps so they arrive as a few pull requests, keep major bumps separate, and merge them yourself: the factory does not auto-merge. Dependabot's own pull requests are not factory pull requests (the factory acts only on the Claude app's), so the guard and your required checks judge them like any other.
+
 ## The approval policy
 
 **Settings > Actions > General** sets whether workflow runs started by a bot wait for you. Under the default policy a later push by `github-actions[bot]` to a factory pull request can run as `action_required` until you click **Approve and run workflows**. The factory does not depend on the setting; decide it after you have seen whether your repository shows the prompt (a private repository may not).

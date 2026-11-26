@@ -9,6 +9,7 @@ const { CALLERS } = require('../lib/callers.js');
 const { loadConfig } = require('../lib/config.js');
 const { SKILLS, runInit, withAgentsBlock } = require('../lib/init.js');
 const { parseArgs } = require('../scripts/factory-init.js');
+const { writeCoveredCi } = require('./helpers.js');
 
 const REF = 'a'.repeat(40);
 
@@ -22,8 +23,7 @@ function project({ ci = true, scripts = { lint: 'eslint .', test: 'node --test' 
   fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ scripts }));
   fs.writeFileSync(path.join(root, 'package-lock.json'), '{}');
   if (ci) {
-    fs.mkdirSync(path.join(root, '.github', 'workflows'), { recursive: true });
-    fs.writeFileSync(path.join(root, '.github', 'workflows', 'ci.yml'), 'name: CI\non: push\n');
+    writeCoveredCi(root, 'CI');
   }
   return { root, git };
 }
