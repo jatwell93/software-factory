@@ -118,8 +118,26 @@ test('doctor is ok when nothing is hidden, and skips outside a git checkout', ()
   assert.equal(find(runDoctor(root, { git: none, gh: () => '' })).status, 'skip');
 });
 
-test('a whole ignored folder is skipped even when its name looks like a source file', () => {
-  const { git, write } = repo({ ignore: 'vendor.js/\n' });
-  write('vendor.js/a.js');
-  assert.deepEqual(ignoredSource(git), []);
+test('a new subfolder of an ignored folder is opened, however deep', () => {
+  const { git, write } = repo();
+  write('backend/routers/v2/deep/new.py');
+  write('backend/routers/v2/notes.txt');
+  const found = ignoredSource(git);
+  assert.deepEqual(
+    found.map((f) => f.file),
+    ['backend/routers/v2/deep/new.py'],
+  );
+  assert.match(found[0].rule, /\.gitignore:1 backend\/routers\//);
+});
+
+test('a source folder that is ignored whole is reported; dependency, build and dot folders are not', () => {
+  const { git, write } = repo({ ignore: 'generated/\ndist/\n.cache/\nnode_modules/\n' });
+  write('generated/api.ts');
+  write('dist/bundle.js');
+  write('.cache/x.js');
+  write('backend/node_modules/pkg/index.js');
+  assert.deepEqual(
+    ignoredSource(git).map((f) => f.file),
+    ['generated/api.ts'],
+  );
 });
