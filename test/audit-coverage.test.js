@@ -5,6 +5,8 @@ const os = require('node:os');
 const path = require('node:path');
 
 const {
+  ADVICE,
+  GENERIC_ADVICE,
   GREENFIELD_COMMITS,
   auditCoverage,
   auditFix,
@@ -65,6 +67,42 @@ test('a commented-out step is no evidence, and the factory callers are not the p
   const own = project({ '.github/workflows/no-go-guard.yml': ci('run: npm test') });
   const audit = auditCoverage(own, { commits: 100, skipFiles: CALLERS });
   assert.deepEqual(audit.present, []);
+});
+
+test('a tool named only in an end-of-line comment is no evidence; a # inside a word is not a comment', () => {
+  const trailing = ci('run: echo hi # TODO add pytest and gitleaks');
+  assert.deepEqual(auditCoverage(project(workflow(trailing)), { commits: 100 }).present, []);
+  const block = 'name: CI\njobs:\n  j:\n    steps:\n      - run: |\n          echo hi # npm test\n';
+  assert.deepEqual(auditCoverage(project(workflow(block)), { commits: 100 }).present, []);
+  // `#` with no space before it is part of the word, so the real step after it still counts.
+  const word = ci('run: npm test --reporter=a#b');
+  assert.deepEqual(auditCoverage(project(workflow(word)), { commits: 100 }).present, ['tests']);
+  const spaced = ci('run: pytest # slow');
+  assert.deepEqual(auditCoverage(project(workflow(spaced)), { commits: 100 }).present, ['tests']);
+});
+
+test('every tool the advice tells the owner to add is one the check then finds', () => {
+  const sample = (text) => {
+    const ticks = [...text.matchAll(/`([^`]+)`/g)].map((m) => m[1]);
+    const named = { CodeQL: 'uses: github/codeql-action/analyze@v3' };
+    const extra = Object.entries(named)
+      .filter(([word]) => text.includes(word))
+      .map(([, step]) => step);
+    return [...(ticks.length ? ticks.map((t) => `run: ${t}`) : [`run: ${text}`]), ...extra];
+  };
+  for (const [stack, kinds] of Object.entries({ ...ADVICE, generic: GENERIC_ADVICE })) {
+    for (const [kind, text] of Object.entries(kinds)) {
+      if (stack === 'generic') continue; // prose, not a command
+      for (const step of sample(text)) {
+        const found = auditCoverage(project(workflow(ci(step))), { commits: 100 });
+        const label = { tests: 'tests', lint: 'lint or type check', security: 'security scan' }[
+          kind
+        ];
+        const wanted = label || 'secrets scan';
+        assert.ok(found.present.includes(wanted), `${stack} ${kind}: ${step}`);
+      }
+    }
+  }
 });
 
 test('Dependabot and Renovate count as a dependency policy; a cooldown is noted when absent', () => {
