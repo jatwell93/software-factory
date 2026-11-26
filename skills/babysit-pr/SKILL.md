@@ -7,8 +7,9 @@ description: >-
   have gone quiet. Use right after `gh pr create` in a local session, without being
   asked, and after pushing to a PR, when the user says
   "babysit", "check the bot comments", "check the PR comments", "is CI green",
-  "/babysit-pr <n>", or pastes a bot review comment. Do NOT use to merge, or for PRs
-  on branches you did not create in this session or change.
+  "/babysit-pr <n>", or pastes a bot review comment. Do NOT use to merge, or on your
+  own initiative for a PR on a branch you did not create or change; when the owner
+  names such a PR with "/babysit-pr <n>", that is a request and the skill applies.
 ---
 
 # Babysit a PR
