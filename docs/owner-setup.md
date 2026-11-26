@@ -28,6 +28,20 @@ The agent action authenticates to GitHub through the Claude GitHub App, so the a
 
 The factory needs `main` (your default branch) to refuse unchecked changes. This is a **branch ruleset**, not a tag ruleset and not a classic "branch protection rule": `doctor` reads rulesets only.
 
+### One command
+
+Merge the pull request `init` produced, then run `init` again with the name of each CI check that must pass (the name shown in a pull request's checks list; for a job `check` in a workflow `CI`, it is `check`):
+
+```
+factory init --apply-ruleset --ci-check check
+```
+
+It creates one ruleset named `software-factory` through the GitHub API: `factory/no-go-guard`, `factory/change-ids` and your checks required, force pushes and deletion blocked, no bypass. A second run changes nothing; if the ruleset is there but lacks a check, it updates it. You need admin rights on the repository. Run `doctor` after: `ruleset checks`, `ruleset gate` and `force pushes` should read `ok`.
+
+It refuses until the factory's check workflows are on the default branch. Required earlier, a check could never report and the `init` pull request could not merge. The API takes a check name that has not run yet, so you do not need a throwaway pull request first.
+
+### By hand
+
 **Do these in order**, because the factory's two checks, `factory/no-go-guard` and `factory/change-ids`, only exist once they have run on a pull request. They run from the workflow files on the default branch (they use `pull_request_target`), so they cannot run on the pull request that adds them, and GitHub's check picker only offers checks that have run in the repository.
 
 1. Merge the pull request `init` produced.

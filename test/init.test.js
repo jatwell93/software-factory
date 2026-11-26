@@ -368,6 +368,7 @@ test('parseArgs reads values, repeated lists and switches', () => {
       gates: ['a', 'b'],
       ciWorkflows: ['CI'],
       reviewBots: ['cursor'],
+      ciChecks: [],
       ref: 'abc',
       force: true,
       labels: false,

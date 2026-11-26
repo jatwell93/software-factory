@@ -61,10 +61,12 @@ test('init prints each owner step with the link to its section', () => {
     assert.ok(joined.includes(ownerDoc(section)), section);
   }
   const ruleset = steps.find((s) => s.includes(ownerDoc('ruleset')));
-  assert.match(ruleset, /branch ruleset \(not a tag ruleset\)/);
+  assert.match(ruleset, /--apply-ruleset --ci-check/);
   assert.match(ruleset, /on main/);
-  assert.match(ruleset, /any other PR/);
-  for (const check of REQUIRED_CHECKS) assert.ok(ruleset.includes(check), check);
+  assert.match(ruleset, /by hand/i);
+  const done = ownerSteps({ default_branch: 'main' }, { rulesetDone: true });
+  assert.ok(done.some((s) => /ruleset on main is in place/.test(s)));
+  assert.ok(!done.some((s) => /--apply-ruleset/.test(s)));
 });
 
 /** A project `init` set up, with real git and a gh that answers like the repository says. */
