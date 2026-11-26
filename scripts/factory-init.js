@@ -11,6 +11,7 @@
  *     [--spec-source <name>]
  *     [--apply-ruleset --ci-check <check name>...]
  *     [--force] [--adopt-hooks] [--dry-run] [--no-labels] [--no-adapter-setup]
+ *     [--no-permissions]
  *
  * --ref defaults to the commit this factory checkout is on: it must be pushed, as
  * the callers fetch the factory at that commit. Exit codes: 0 done, 2 usage error.
@@ -41,6 +42,7 @@ const SWITCHES = {
   '--dry-run': ['dryRun', true],
   '--no-labels': ['labels', false],
   '--no-adapter-setup': ['adapterSetup', false],
+  '--no-permissions': ['permissions', false],
 };
 
 function parseArgs(argv) {

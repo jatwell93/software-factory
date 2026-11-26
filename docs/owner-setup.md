@@ -67,6 +67,41 @@ Do not tick **Require a pull request before merging** for this: you cannot appro
 
 On a private repository the first factory push needs that click: GitHub holds the run until you approve it, and the factory cannot approve it for you. Open the pull request's **Checks** tab and click **Approve and run workflows**.
 
+## The command allowlist
+
+`init` adds read-only rules to the project's `.claude/settings.json` (under `permissions.allow`), so the agent stops asking before each factory command. Nothing else in the file changes, and a second run adds only what is missing. Skip it with `--no-permissions`. `doctor` warns when a rule is missing. The file is a protected path, so it goes in the same pull request as the rest of `init`.
+
+The rules name `$FACTORY_DIR`, written as the skills write it, so the file holds no path of yours. Your shell must set `FACTORY_DIR` ([below](#factory_dir)).
+
+| Allowed                                | Why it is safe                                                                                                |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `scripts/pr-feedback.js`               | Reads a pull request: checks, threads, reviews. Its reply and resolve commands only answer and close threads. |
+| `scripts/factory-status.js`            | Reads every open pull request and prints one line each.                                                       |
+| `scripts/factory-doctor.js`            | Reads the project and GitHub and prints each gap with its fix.                                                |
+| `scripts/check-no-go.js`               | Reads a diff and fails when it touches a protected path.                                                      |
+| `scripts/check-change-ids.js`          | Reads the change ids in a pull request and fails on a clash.                                                  |
+| `scripts/babysit-round.js`             | Reads the commit trailers of the current branch and prints the round count.                                   |
+| `scripts/factory-check-change.js`      | Reads the spec source and fails when a change is missing.                                                     |
+| `bin/factory.js status and doctor`     | The front door, for the two read-only commands only. The rest (init, upgrade, cleanup) write and still ask.   |
+| `gh pr view`, `list`, `checks`, `diff` | Read a pull request. They have no write verb.                                                                 |
+| `gh run view`, `list`                  | Read workflow runs and their logs.                                                                            |
+| `gh workflow view`, `list`             | Read workflows.                                                                                               |
+| `gh issue view`, `list`                | Read issues.                                                                                                  |
+
+Never allowed: `gh api` (it writes with any verb), `gh pr merge`, any delete, a force push. These factory scripts write to the project or to GitHub, so they still ask:
+
+| Not allowed                        | Why                                                               |
+| ---------------------------------- | ----------------------------------------------------------------- |
+| `scripts/cleanup-merged.js`        | deletes local branches and worktrees                              |
+| `scripts/factory-post-merge.js`    | pulls the default branch and deletes the merged branch            |
+| `scripts/factory-init.js`          | writes the project and GitHub (labels, ruleset)                   |
+| `scripts/factory-upgrade.js`       | rewrites the workflows and skills of the project                  |
+| `scripts/factory-pin-sync.js`      | opens pull requests in other projects                             |
+| `scripts/factory-issue.js`         | creates a tracking issue when there is none                       |
+| `scripts/factory-ticket.js`        | creates issues on GitHub                                          |
+| `scripts/factory-new-change.js`    | writes a change into the project                                  |
+| the rest of `scripts/factory-*.js` | run inside the workflow runner: they label, comment or start runs |
+
 ## Review bots
 
 Any reviewer can comment on a factory pull request: a bot you listed, a bot you did not, or a person. Every review or comment starts a babysit pass, which reads the unresolved threads, judges each one, fixes it or replies and closes it. The factory has no per-bot behaviour, and no bot name can halt a run.
