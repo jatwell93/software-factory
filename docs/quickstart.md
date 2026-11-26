@@ -43,8 +43,7 @@ Open `factory.config.yml` and read it before you commit. The gates are what the 
 1. Add the `CLAUDE_CODE_OAUTH_TOKEN` repository secret.
 2. Check the Claude GitHub App covers the repository.
 3. Commit what `init` wrote in one pull request and merge it. Only the files `init` listed: check `git status` first, so a stray folder or compiled file does not ride along. The factory's checks that run from the default branch do not exist yet, so only `factory/reviews-settled` runs on this pull request, and it ends green with "nothing to settle". On a pin older than the fix it fails with "cannot read factory.config.yml": ignore it, it is not a required check.
-4. Open any other pull request (a README edit is enough) and let its checks finish. The factory's two required checks, `factory/no-go-guard` and `factory/change-ids`, only exist after they have run once. On a private repository you may have to click **Approve and run workflows** on that pull request.
-5. Add a branch ruleset on `main` that requires those two checks, your CI check and "Block force pushes".
+4. Add the branch ruleset on `main` (the factory's two checks, your CI check, no force pushes) with one command, from the project's root: `factory init --apply-ruleset --ci-check <your CI check name>`. The name is the one in a pull request's checks list. It refuses until step 3 is merged. By hand instead: [owner setup](owner-setup.md#by-hand).
 
 Then run `doctor` from the project's root:
 

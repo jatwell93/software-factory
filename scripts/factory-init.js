@@ -9,6 +9,7 @@
  *   node factory-init.js [--ref <sha|v*>] [--owner <login>] [--default-branch <name>]
  *     [--gate <cmd>]... [--ci-workflow <name>]... [--review-bot <login>]...
  *     [--spec-source <name>]
+ *     [--apply-ruleset --ci-check <check name>...]
  *     [--force] [--adopt-hooks] [--dry-run] [--no-labels] [--no-adapter-setup]
  *
  * --ref defaults to the commit this factory checkout is on: it must be pushed, as
@@ -31,17 +32,19 @@ const LIST_FLAGS = {
   '--gate': 'gates',
   '--ci-workflow': 'ciWorkflows',
   '--review-bot': 'reviewBots',
+  '--ci-check': 'ciChecks',
 };
 const SWITCHES = {
   '--force': ['force', true],
   '--adopt-hooks': ['adoptHooks', true],
+  '--apply-ruleset': ['applyRuleset', true],
   '--dry-run': ['dryRun', true],
   '--no-labels': ['labels', false],
   '--no-adapter-setup': ['adapterSetup', false],
 };
 
 function parseArgs(argv) {
-  const options = { gates: [], ciWorkflows: [], reviewBots: [] };
+  const options = { gates: [], ciWorkflows: [], reviewBots: [], ciChecks: [] };
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i];
     if (SWITCHES[flag]) {

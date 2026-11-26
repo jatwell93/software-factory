@@ -367,11 +367,37 @@ test('the doctor script exits 1 on a failure, 0 otherwise, and prints each fix',
   assert.ok(out.some((l) => /fix: claude setup-token/.test(l)));
 });
 
-test('the doctor script takes no arguments', () => {
-  assert.throws(
-    () => main(['--x']),
-    (error) => error.userError,
+test('the doctor script takes no arguments except --json', () => {
+  for (const argv of [['--x'], ['--json', '--x']]) {
+    assert.throws(
+      () => main(argv),
+      (error) => error.userError,
+    );
+  }
+});
+
+test('--json prints one parseable object with the results, and the same exit code', () => {
+  const { root, git } = initialised();
+  const out = [];
+  const gh = healthyGh({ 'secret list --json name --jq .[].name': '' });
+  assert.equal(
+    main(['--json'], root, (l) => out.push(l), { git, gh }),
+    1,
   );
+  assert.equal(out.length, 1);
+  const report = JSON.parse(out[0]);
+  assert.equal(report.ok, false);
+  assert.equal(report.counts.fail, 1);
+  const secret = report.results.find((r) => r.name === 'secret');
+  assert.equal(secret.status, 'fail');
+  assert.match(secret.fix, /claude setup-token/);
+
+  const clean = [];
+  assert.equal(
+    main(['--json'], root, (l) => clean.push(l), { git, gh: healthyGh() }),
+    0,
+  );
+  assert.equal(JSON.parse(clean[0]).ok, true);
 });
 
 test('a tag pin GitHub does not have fails without asking about protection', () => {
