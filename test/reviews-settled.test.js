@@ -402,3 +402,79 @@ test('the change label comes from the config', () => {
   run([], { cfg, gh: some.gh });
   assert.equal(posts(some.calls).length, 1);
 });
+
+// --wait: the end of a quiet window is noticed without the (delayed) schedule trigger.
+
+/** Runs --wait with a clock that only the sleeps move; `reports[i]` is the i-th read. */
+function waiting(reports, { argv = ['9', '--wait'], extra = {}, start = at(1) } = {}) {
+  const { gh, calls } = fakeGh({ prs: [factoryPr()] });
+  let clockNow = start;
+  let read = 0;
+  const sleeps = [];
+  const lines = [];
+  const status = main(argv, {
+    config: configWith(),
+    gh,
+    feedback: () => reports[Math.min(read++, reports.length - 1)],
+    now: clockNow,
+    clock: () => clockNow,
+    sleep: (ms) => {
+      sleeps.push(ms);
+      clockNow += ms;
+    },
+    log: (l) => lines.push(l),
+    error: () => {},
+    ...extra,
+  });
+  return { status, calls, sleeps, lines, reads: read };
+}
+const quiet = report({ waitingOn: ['quiet window'] });
+
+test('--wait checks again every minute and posts success once the quiet window ends', () => {
+  const { status, calls, sleeps, lines, reads } = waiting([quiet, quiet, report()]);
+  assert.equal(status, 0);
+  assert.deepEqual(sleeps, [60000, 60000]);
+  assert.equal(reads, 3);
+  const states = posts(calls).map((c) => c.find((a) => a.startsWith('state=')));
+  assert.deepEqual(states.at(-1), 'state=success');
+  assert.equal(states.filter((s) => s === 'state=success').length, 1);
+  assert.ok(lines.includes('#9: asked the factory for a pass'));
+});
+
+test('--wait ends at once when the PR is already settled, and never past 40 minutes', () => {
+  assert.deepEqual(waiting([report()]).sleeps, []);
+  // Always pending (the bot never posts and the timeout is longer than the cap).
+  const long = { extra: { config: configWith('reviews_timeout_minutes: 600') } };
+  const { sleeps } = waiting([quiet], long);
+  assert.equal(sleeps.length, 40);
+});
+
+test('--wait stops when the head moved: the newer push has its own run', () => {
+  const { sleeps, calls } = waiting([quiet, report({ head: 'sha2', waitingOn: ['quiet window'] })]);
+  assert.deepEqual(sleeps, [60000]);
+  const pending = posts(calls).filter((c) => c.includes('state=pending'));
+  assert.equal(pending.length, 2);
+});
+
+test('--wait dispatches each missing-status recovery once, not on every poll', () => {
+  // Past the grace period with neither required status: the callers cancel an
+  // in-progress run when dispatched again, so a second dispatch could cancel the first.
+  const long = {
+    start: at(11),
+    extra: { now: at(11), config: configWith('reviews_timeout_minutes: 600') },
+  };
+  const { sleeps, calls } = waiting([quiet], long);
+  assert.equal(sleeps.length, 40);
+  assert.equal(recovered(calls).length, 2);
+});
+
+test('--wait without a PR, or with extra arguments, is a usage error', () => {
+  assert.equal(waiting([quiet], { argv: ['--wait'] }).status, 2);
+  assert.equal(waiting([quiet], { argv: ['9', '10', '--wait'] }).status, 2);
+  assert.equal(waiting([quiet], { argv: ['x', '--wait'] }).status, 2);
+});
+
+test('a run without --wait never sleeps', () => {
+  const { sleeps } = waiting([quiet], { argv: ['9'] });
+  assert.deepEqual(sleeps, []);
+});

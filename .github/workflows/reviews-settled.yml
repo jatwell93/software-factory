@@ -40,7 +40,7 @@ jobs:
   settle:
     name: Publish factory/reviews-settled
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 45 # a PR event waits up to 40 minutes for the quiet window to end
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GH_REPO: ${{ github.repository }}
@@ -91,4 +91,11 @@ jobs:
 
       - name: Publish the status
         if: steps.installed.outputs.present == 'true'
-        run: node .software-factory/scripts/factory-reviews-settled.js ${PR_NUMBER:+"$PR_NUMBER"}
+        run: |
+          # A PR event waits for the quiet window to end: the schedule is delayed by hours
+          # on GitHub. A newer event cancels this run (the caller's concurrency group).
+          if [[ "$GITHUB_EVENT_NAME" == pull_request* ]]; then
+            node .software-factory/scripts/factory-reviews-settled.js "$PR_NUMBER" --wait
+          else
+            node .software-factory/scripts/factory-reviews-settled.js ${PR_NUMBER:+"$PR_NUMBER"}
+          fi

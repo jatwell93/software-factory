@@ -4,9 +4,10 @@
  * lib/reviews-settled.js for the rule). A factory PR is an open PR the Claude
  * app authored with a change label; any other PR is ignored.
  *
- * Usage: node scripts/factory-reviews-settled.js [<pr>]
+ * Usage: node scripts/factory-reviews-settled.js [<pr> [--wait]]
  *   with a PR number, only that PR; without, every open factory PR (the
  *   scheduled run, which also ends a quiet window no event announces).
+ *   --wait: keep checking the PR every minute until it settles (at most 40 minutes).
  *
  * The status is posted only when its state or description changed, so a frequent
  * run does not fill the PR with identical statuses.
@@ -58,11 +59,18 @@ const MISSING_STATUS_GRACE_MINUTES = 10;
  * no run for a push, and then the PR cannot be merged and nothing else retries. A
  * dispatch reads the PR from the API and posts nothing if the head moved. A failed
  * dispatch only warns: the next run (every 15 minutes) tries again.
+ *
+ * `asked` holds what this run already dispatched. A `--wait` run passes here every minute,
+ * and the callers cancel an in-progress run of the same PR when dispatched again, so a
+ * second dispatch could cancel the run the first one started.
  */
-function recoverStatuses(gh, config, pr, report, rows, now, log) {
+function recoverStatuses(gh, config, pr, report, rows, now, log, asked = new Set()) {
   if (now - Date.parse(report.lastPushAt) < MISSING_STATUS_GRACE_MINUTES * 60000) return;
   for (const { context, workflow } of REQUIRED_STATUSES) {
     if (rows.some((row) => row.context === context)) continue;
+    const key = `${pr}:${report.head}:${context}`;
+    if (asked.has(key)) continue;
+    asked.add(key);
     try {
       gh(['workflow', 'run', workflow, '--ref', config.default_branch, '-f', `pr=${pr}`]);
       log(`#${pr}: no ${context} status on the head; dispatched ${workflow}`);
@@ -103,18 +111,19 @@ function askFactory(gh, config, number, log) {
   }
 }
 
-function main(argv = process.argv.slice(2), io = {}) {
-  const config = io.config || loadConfig(process.cwd());
-  const gh = io.gh || defaultGh;
-  const feedback = io.feedback || defaultFeedback;
-  const log = io.log || console.log;
-  const now = io.now ?? Date.now();
-  const [arg] = argv;
-  if (arg !== undefined && !/^[1-9][0-9]*$/.test(arg)) {
-    (io.error || console.error)('usage: factory-reviews-settled.js [<pr>]');
-    return 2;
-  }
+/** Longest a run waits for a PR to settle: under the workflow's job timeout. */
+const MAX_WAIT_MINUTES = 40;
+const POLL_SECONDS = 60;
+
+const sleepSync = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+
+/**
+ * One pass over the open factory PRs (or the one given): posts each status that changed.
+ * @returns {{number: number, state: string, head: string}[]} Where each PR stands.
+ */
+function settleOnce(arg, { config, gh, feedback, log, now, asked }) {
   const { changeFromLabels } = createRouter(config);
+  const found = [];
   for (const pr of factoryPrs(gh, changeFromLabels, arg)) {
     const report = feedback(pr.number);
     const status = settledStatus(report, {
@@ -124,8 +133,9 @@ function main(argv = process.argv.slice(2), io = {}) {
       now,
     });
     if (!status) continue;
+    found.push({ number: pr.number, state: status.state, head: report.head });
     const rows = statusesOf(gh, report.head);
-    recoverStatuses(gh, config, pr.number, report, rows, now, log);
+    recoverStatuses(gh, config, pr.number, report, rows, now, log, asked);
     const current = currentStatus(rows);
     if (current && current.state === status.state && current.description === status.description) {
       log(`#${pr.number}: ${status.state} (unchanged)`);
@@ -134,6 +144,43 @@ function main(argv = process.argv.slice(2), io = {}) {
     publish(gh, report.head, status);
     log(`#${pr.number}: ${status.state} (${status.description})`);
     if (status.state === 'success') askFactory(gh, config, pr.number, log);
+  }
+  return found;
+}
+
+/**
+ * With `--wait` and a PR, keep checking until it settles, so the end of a quiet window is
+ * noticed without the `schedule` trigger, which GitHub delays by hours. A newer push or
+ * review cancels the run (the caller's concurrency group) and starts its own; a head that
+ * moved ends the wait too.
+ */
+function main(argv = process.argv.slice(2), io = {}) {
+  const config = io.config || loadConfig(process.cwd());
+  const clock = io.clock || Date.now;
+  const args = argv.filter((a) => a !== '--wait');
+  const wait = args.length !== argv.length;
+  const [arg] = args;
+  if (args.length > 1 || (arg !== undefined && !/^[1-9][0-9]*$/.test(arg)) || (wait && !arg)) {
+    (io.error || console.error)('usage: factory-reviews-settled.js [<pr> [--wait]]');
+    return 2;
+  }
+  const deps = {
+    config,
+    gh: io.gh || defaultGh,
+    feedback: io.feedback || defaultFeedback,
+    log: io.log || console.log,
+    asked: new Set(),
+  };
+  const started = io.now ?? clock();
+  let [last] = settleOnce(arg, { ...deps, now: started });
+  if (!wait) return 0;
+  const sleep = io.sleep || sleepSync;
+  const deadline = started + MAX_WAIT_MINUTES * 60000;
+  while (last && last.state === 'pending' && clock() < deadline) {
+    sleep(POLL_SECONDS * 1000);
+    const [again] = settleOnce(arg, { ...deps, now: clock() });
+    if (!again || again.head !== last.head) break; // closed, or a push the newer run owns
+    last = again;
   }
   return 0;
 }
