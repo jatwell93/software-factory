@@ -62,10 +62,13 @@ const log = (denials) =>
 const DENIALS = [{ tool_name: 'Bash', tool_input: { command: 'pytest -q' } }];
 
 /** A fake gh: the change's open PRs, the head of PR 7, and one tracking issue (#714). */
-function fakeGh({ prs = [], head = HEAD } = {}) {
+function fakeGh({ prs = [], head = HEAD, labels = [] } = {}) {
   const calls = [];
   const gh = (args) => {
     calls.push(args);
+    if (args[0] === 'issue' && args[1] === 'view') {
+      return JSON.stringify({ labels: labels.map((name) => ({ name })) });
+    }
     if (args[0] === 'pr' && args[1] === 'list')
       return JSON.stringify(prs.map((number) => ({ number })));
     if (args[0] === 'pr' && args[1] === 'view') return JSON.stringify({ headRefOid: head });
@@ -100,6 +103,15 @@ test('a denied first task with no PR fails the run and comments the refused comm
   assert.ok(out.some((l) => /^::error::run was refused 1 tool call\(s\)/.test(l)));
   const list = calls.find((c) => c[1] === 'list' && c[0] === 'pr');
   assert.ok(list.includes('factory:add-x'));
+});
+
+test('a run that was refused a call and escalated on the issue did its job: not failed, not commented', () => {
+  const { code, calls, out } = exec(ARGS(), { labels: ['factory:add-x', 'needs-human'] });
+  assert.equal(code, 0);
+  assert.deepEqual(comments(calls), []);
+  assert.ok(out.some((l) => /escalated on #714; not failed/.test(l)));
+  // Other labels do not count as an escalation.
+  assert.equal(exec(ARGS(), { labels: ['factory:add-x', 'bug'] }).code, 1);
 });
 
 test('a first task that did open its PR passes, whatever it was denied', () => {

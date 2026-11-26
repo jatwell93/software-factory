@@ -89,6 +89,13 @@ function main(argv = process.argv.slice(2), io = {}) {
   const lines = denialLines(text);
   const adapter = io.adapter || loadAdapter(config);
   const number = String(trackingIssue(id, { config, adapter, gh }));
+  // The agent is told to escalate when a call is refused. A run that did, labelled the issue
+  // and told the owner why, did its job: failing it would add a retry the owner must clear.
+  const issue = JSON.parse(gh(['issue', 'view', number, '--json', 'labels']));
+  if ((issue.labels || []).some((l) => l.name === labels.needs_human)) {
+    log(`run was refused ${denied} tool call(s) and escalated on #${number}; not failed`);
+    return 0;
+  }
   gh(['issue', 'comment', number, '--body', deniedComment({ id, mode, denied, lines, runUrl })]);
   for (const line of lines) log(line);
   log(`::error::run was refused ${denied} tool call(s) and made nothing; commented on #${number}`);
