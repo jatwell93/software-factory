@@ -90,7 +90,10 @@ gives the literal path: write it in place of `$FACTORY_DIR`.
 
 1. `node "$FACTORY_DIR/scripts/check-no-go.js" --change <id>`. On any non-zero exit, do not
    push. Escalate with the listed paths (exit 1) or the error (exit 2, for
-   example an unreadable `no_go` list).
+   example an unreadable `no_go` list). Then run
+   `node "$FACTORY_DIR/scripts/check-ignored.js"`. Exit 1 means a source file you wrote
+   is ignored by git, so `git add` dropped it and the PR would miss it: do not push, and
+   do not `git add -f` it. Escalate with the listed files and the rule that ignores each.
 2. `git push -u origin HEAD`.
 3. Create the label if it is missing:
    `gh label create "<change-label>" --color 5319E7 --description "Factory task for <id>"`

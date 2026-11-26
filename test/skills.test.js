@@ -145,6 +145,17 @@ test('babysit-pr starts itself for the owner’s own PR and stops at ready or sa
   assert.match(read('templates', 'agents-block.md'), /Your own pull requests[^\n]*babysit-pr <n>/);
 });
 
+test('both run-spec skills check for ignored source files before the push', () => {
+  for (const name of ['run-spec', 'paul/run-spec']) {
+    const text = body(name);
+    const push = text.indexOf('## 4. Check, push, open the PR');
+    const step = text.slice(push, text.indexOf('2. `git push -u origin HEAD`.', push));
+    assert.match(step, /scripts\/check-ignored\.js/, name);
+    assert.match(step, /do not push, and\s+do not `git add -f` it/, name);
+  }
+  assert.ok(fs.existsSync(path.join(root, 'scripts', 'check-ignored.js')));
+});
+
 test('the runner prompt points at skills that this repo ships', () => {
   const workflow = read('.github', 'workflows', 'factory.yml');
   for (const [, name] of workflow.matchAll(/\.claude\/skills\/([a-z-]+)\/SKILL\.md/g)) {
