@@ -79,6 +79,7 @@ The rules name `$FACTORY_DIR`, written as the skills write it, so the file holds
 | `scripts/factory-status.js`            | Reads every open pull request and prints one line each.                                                       |
 | `scripts/factory-doctor.js`            | Reads the project and GitHub and prints each gap with its fix.                                                |
 | `scripts/check-no-go.js`               | Reads a diff and fails when it touches a protected path.                                                      |
+| `scripts/check-ignored.js`             | Reads git’s ignore rules and fails when a source file is hidden by one.                                       |
 | `scripts/check-change-ids.js`          | Reads the change ids in a pull request and fails on a clash.                                                  |
 | `scripts/babysit-round.js`             | Reads the commit trailers of the current branch and prints the round count.                                   |
 | `scripts/factory-check-change.js`      | Reads the spec source and fails when a change is missing.                                                     |
