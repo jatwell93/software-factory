@@ -132,6 +132,23 @@ test('the PAUL run-spec limits its per-change guard to the phase', () => {
   assert.doesNotMatch(text, /first unchecked plan in the branch's roadmap/);
 });
 
+test('the PAUL archive step leaves STATE.md alone while another phase is active', () => {
+  const text = skillText('run-spec', 'paul');
+  const start = text.indexOf('## Archive a finished change');
+  const section = text.slice(start);
+  const step6 = section.slice(section.indexOf('6. **Record it in STATE.md'));
+  const step6Text = step6.slice(0, step6.indexOf('7. **Check what changed'));
+  assert.match(step6Text, /only when no other phase is active/);
+  assert.match(step6Text, /unchecked plan line in any other phase's\s+section/);
+  assert.match(step6Text, /leave `\.paul\/STATE\.md` untouched/);
+  assert.match(step6Text, /PR body that STATE\.md was left alone/);
+  // The write itself is still there for the case where nothing else is active.
+  assert.match(step6Text, /archived by the factory/);
+  assert.match(section, /plus\s+`\.paul\/STATE\.md` when step 6 wrote it/);
+  // Only the PAUL variant changed: the OpenSpec skill has no STATE.md.
+  assert.doesNotMatch(skillText('run-spec', 'openspec'), /STATE\.md/);
+});
+
 test('an OpenSpec project is not asked for PAUL', () => {
   const { root, git } = project();
   runInit({ root, ref: REF, labels: false, adapterSetup: false }, io(git));
