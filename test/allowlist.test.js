@@ -99,7 +99,7 @@ test('a file that cannot be merged into is refused with the reason', () => {
   assert.throws(() => mergeSettings('[]'), /not a JSON object/);
   assert.throws(() => mergeSettings('{"permissions":[]}'), /"permissions" is not an object/);
   assert.throws(() => mergeSettings('{"permissions":{"allow":"x"}}'), /not a list/);
-  assert.deepEqual(missingRules('{ nope'), RULES);
+  assert.throws(() => missingRules('{ nope'), /not valid JSON/);
 });
 
 function project() {
@@ -169,4 +169,15 @@ test('doctor warns when rules are missing and is ok once init has added them', (
   assert.match(before.fix, /factory-init\.js/);
   runInit({ root, ref: REF }, io);
   assert.equal(find(runDoctor(root, { git, gh: () => '' })).status, 'ok');
+});
+
+test('doctor says an unreadable settings file needs a hand fix, not another init run', () => {
+  const { root, git, io } = project();
+  runInit({ root, ref: REF }, io);
+  fs.writeFileSync(settings(root), '{ not json');
+  const result = runDoctor(root, { git, gh: () => '' }).find((r) => r.name === 'allowlist');
+  assert.equal(result.status, 'warn');
+  assert.match(result.detail, /cannot be read \(not valid JSON.*init leaves it alone/);
+  assert.match(result.fix, /^Fix the file/);
+  assert.doesNotMatch(result.detail, /missing/);
 });
