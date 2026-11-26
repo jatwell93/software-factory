@@ -4,7 +4,8 @@ description: >-
   Drive an open pull request to a clean state without the user relaying anything:
   wait for CI, fetch unresolved review-bot and human review threads, judge each one,
   fix and push or reply and resolve, and repeat until CI is green and the reviews
-  have gone quiet. Use after opening or pushing to a PR, when the user says
+  have gone quiet. Use right after `gh pr create` in a local session, without being
+  asked, and after pushing to a PR, when the user says
   "babysit", "check the bot comments", "check the PR comments", "is CI green",
   "/babysit-pr <n>", or pastes a bot review comment. Do NOT use to merge, or for PRs
   on branches you did not create in this session or change.
@@ -45,6 +46,23 @@ gives the literal path: write it in place of `$FACTORY_DIR`.
    instead of polling.
 
 Cap: **`<cap>` fix rounds per PR.** After that, stop and report what is still open.
+
+## Your own pull request (a local session)
+
+In a session with the owner, not a factory run, start this loop yourself right after
+`gh pr create`. Do not wait to be told that the comments have landed.
+
+- Use the PR number in every step above.
+- A PR the owner opened by hand and names (`/babysit-pr <n>`) is fine too. When you
+  are not on its branch, run `gh pr checkout <n>` first, but only with a clean working
+  tree; with a dirty one, stop and say so.
+- Stop as soon as the owner can merge, not only at step 5. After each read of the
+  feedback run `node "$FACTORY_DIR/scripts/factory-status.js" <n>`. It exits 0 for
+  `ready` and for `safe`. On `safe`, only a quiet window or a bot that may never post
+  is outstanding: stop, and do not wait out the quiet window. A comment that lands
+  after the merge opens a follow-up issue.
+- End with the verdict and the bots still outstanding, in one line the owner can act
+  on: "ready: merge" or "safe: merge now, `<bot>` has not posted".
 
 Log the one-line state at each step with `node "$FACTORY_DIR/scripts/pr-feedback.js" <n> --summary`.
 

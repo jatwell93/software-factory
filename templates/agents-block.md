@@ -12,6 +12,7 @@ Changes are built by [jatwell93/software-factory](https://github.com/jatwell93/s
 - **Change id:** lowercase letters, digits and hyphens, at most 42 characters: every PR and tracking issue carries the label `factory:<id>` and GitHub caps a label at 50.
 - **Protected paths:** the factory never edits its fixed baseline (workflows, `.claude/**`, `.githooks/**`, `AGENTS.md`, `CLAUDE.md`, `factory.config.yml`), `protected_paths` in `factory.config.yml`, or a change's own `no_go` list. A task that needs one is an owner task: write it `- [ ] 2.3 (owner) ...`.
 - **Upgrade the pin:** change the 40-character commit in each caller workflow (`uses: ...@<sha>` and `factory_ref:`) in one PR.
+- **Your own pull requests:** in a local session, run `babysit-pr <n>` right after `gh pr create`, without being asked. It waits for CI and the review bots, answers their comments, and ends with `ready` or `safe` (or what is still open), so the owner never says when comments have landed. You do not merge.
 - **Run the factory's scripts yourself** (`pr-feedback.js`, `cleanup-merged.js`, `check-no-go.js`): set `FACTORY_DIR` to a checkout of that repo and call `node "$FACTORY_DIR/scripts/<name>.js"`. The five skills in `.claude/skills/` are copies of the factory's; edit them there, not here.
 
 <!-- software-factory:end -->

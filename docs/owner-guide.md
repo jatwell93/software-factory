@@ -44,6 +44,8 @@ factory status 42       # one pull request; exit 0 when you can merge
 
 The list ends with **waiting on you (needs-human)**: issues and pull requests that need your answer.
 
+**Your own pull requests.** When Claude opens a pull request in your session, it runs `babysit-pr` itself right after (the agent block `init` writes tells it to). It waits for CI and the bots, answers their comments, and stops with `ready` or `safe`, so you never say that comments have landed. For a pull request you opened by hand, ask `/babysit-pr <n>` once.
+
 Merging early is safe when the word is `safe`. The factory opens a follow-up issue for a comment that lands after the merge ([details](factory-guide.md#a-review-comment-after-you-merge)).
 
 ## After you merge

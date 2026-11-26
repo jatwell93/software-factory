@@ -129,6 +129,18 @@ test('the flags a skill passes to a script are ones the script reads', () => {
   assert.match(body('run-spec'), /--change/);
 });
 
+test('babysit-pr starts itself for the owner’s own PR and stops at ready or safe', () => {
+  const text = body('babysit-pr');
+  assert.match(text, /## Your own pull request/);
+  assert.match(text, /right after\s+`gh pr create`/);
+  assert.match(text, /factory-status\.js" <n>/);
+  assert.match(text, /On `safe`[\s\S]*do not wait out the quiet window/);
+  assert.match(text, /gh pr checkout <n>[\s\S]*clean working\s+tree/);
+  // The script it relies on exists and exits 0 for ready and safe.
+  assert.match(read('scripts', 'factory-status.js'), /ready.*safe|safe.*ready/s);
+  assert.match(read('templates', 'agents-block.md'), /Your own pull requests[^\n]*babysit-pr <n>/);
+});
+
 test('the runner prompt points at skills that this repo ships', () => {
   const workflow = read('.github', 'workflows', 'factory.yml');
   for (const [, name] of workflow.matchAll(/\.claude\/skills\/([a-z-]+)\/SKILL\.md/g)) {
