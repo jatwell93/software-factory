@@ -8,6 +8,7 @@ const { execFileSync } = require('node:child_process');
 const { runInit } = require('../lib/init.js');
 const { runDoctor, tagProtected } = require('../lib/doctor.js');
 const { main } = require('../scripts/factory-doctor.js');
+const { writeCoveredCi } = require('./helpers.js');
 
 const SHA = 'b'.repeat(40);
 const REPO = 'jatwell93/software-factory';
@@ -41,8 +42,7 @@ function initialised(ref = SHA) {
   git(['remote', 'add', 'origin', 'https://github.com/octo/app.git']);
   fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ scripts: { test: 't' } }));
   fs.writeFileSync(path.join(root, 'package-lock.json'), '{}');
-  fs.mkdirSync(path.join(root, '.github', 'workflows'), { recursive: true });
-  fs.writeFileSync(path.join(root, '.github', 'workflows', 'ci.yml'), 'name: Test\non: push\n');
+  writeCoveredCi(root, 'Test');
   runInit(
     { root, ref, labels: false, adapterSetup: false },
     { git, gh: () => '', setup: () => {} },

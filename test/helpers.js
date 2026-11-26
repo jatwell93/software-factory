@@ -41,4 +41,38 @@ function fakeIo({ diff = '', files = '' } = {}) {
   };
 }
 
-module.exports = { tempRoot, fakeIo, MINIMAL_CONFIG };
+/** A CI workflow, named `name`, with a job for every kind of audit; plus a Dependabot config. */
+const COVERED_CI = (name) =>
+  [
+    `name: ${name}`,
+    'on: push',
+    'jobs:',
+    '  check:',
+    '    runs-on: ubuntu-latest',
+    '    steps:',
+    '      - run: npm test',
+    '      - run: npm run lint',
+    '      - uses: github/codeql-action/analyze@v3',
+    '      - uses: gitleaks/gitleaks-action@v2',
+    '',
+  ].join('\n');
+const DEPENDABOT_CONFIG =
+  'version: 2\nupdates:\n  - package-ecosystem: npm\n    cooldown:\n      default-days: 7\n';
+
+/** Writes the covered CI workflow and the Dependabot config into a project. */
+function writeCoveredCi(root, name) {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  fs.mkdirSync(path.join(root, '.github', 'workflows'), { recursive: true });
+  fs.writeFileSync(path.join(root, '.github', 'workflows', 'ci.yml'), COVERED_CI(name));
+  fs.writeFileSync(path.join(root, '.github', 'dependabot.yml'), DEPENDABOT_CONFIG);
+}
+
+module.exports = {
+  tempRoot,
+  fakeIo,
+  MINIMAL_CONFIG,
+  COVERED_CI,
+  DEPENDABOT_CONFIG,
+  writeCoveredCi,
+};
