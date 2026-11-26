@@ -12,7 +12,7 @@ const config = { default_branch: 'main' };
 const REF = 'a'.repeat(40);
 
 /** A gh that answers the ruleset calls and records the bodies it was sent. */
-function fakeGh({ callers = true, rules = [], rulesets = [], refuse = false } = {}) {
+function fakeGh({ callers = true, rules = [], rulesets = [], full = {}, refuse = false } = {}) {
   const calls = [];
   const sent = [];
   const gh = (args) => {
@@ -34,7 +34,9 @@ function fakeGh({ callers = true, rules = [], rulesets = [], refuse = false } = 
       });
       return '{}';
     }
-    if (endpoint.endsWith('/rulesets')) return JSON.stringify(rulesets);
+    if (endpoint.includes('/rulesets?')) return JSON.stringify(rulesets);
+    const one = endpoint.match(/\/rulesets\/(\d+)$/);
+    if (one) return JSON.stringify(full[one[1]] || {});
     throw new Error(`unexpected ${args.join(' ')}`);
   };
   return { gh, calls, sent };
@@ -91,6 +93,50 @@ test('a missing project check, or force pushes allowed, is fixed by updating our
   assert.deepEqual(applyRuleset(config, ['check'], gh), { status: 'updated' });
   assert.equal(sent[0].method, 'PUT');
   assert.equal(sent[0].endpoint, 'repos/octo/app/rulesets/7');
+});
+
+test('an update keeps the owner’s bypass actors, extra rules and extra checks', () => {
+  const bypass = [{ actor_id: 5, actor_type: 'RepositoryRole', bypass_mode: 'always' }];
+  const { gh, sent } = fakeGh({
+    rules: rulesFor('factory/no-go-guard', 'factory/change-ids', 'old-ci'),
+    rulesets: [{ id: 7, name: 'software-factory', source_type: 'Repository' }],
+    full: {
+      7: {
+        bypass_actors: bypass,
+        rules: [
+          { type: 'deletion' },
+          {
+            type: 'required_status_checks',
+            parameters: {
+              strict_required_status_checks_policy: true,
+              required_status_checks: [{ context: 'old-ci' }, { context: 'lint' }],
+            },
+          },
+          { type: 'required_linear_history' },
+        ],
+      },
+    },
+  });
+  assert.deepEqual(applyRuleset(config, ['check'], gh), { status: 'updated' });
+  const body = sent[0].body;
+  assert.deepEqual(body.bypass_actors, bypass);
+  assert.ok(body.rules.some((r) => r.type === 'required_linear_history'));
+  const checks = body.rules.find((r) => r.type === 'required_status_checks').parameters;
+  assert.equal(checks.strict_required_status_checks_policy, true);
+  assert.deepEqual(
+    checks.required_status_checks.map((c) => c.context),
+    ['factory/no-go-guard', 'factory/change-ids', 'old-ci', 'lint', 'check'],
+  );
+  assert.equal(body.rules.filter((r) => r.type === 'non_fast_forward').length, 1);
+});
+
+test('an organisation ruleset with our name is not ours: the repository one is created', () => {
+  const { gh, calls, sent } = fakeGh({
+    rulesets: [{ id: 3, name: 'software-factory', source_type: 'Organization' }],
+  });
+  assert.deepEqual(applyRuleset(config, ['check'], gh), { status: 'created' });
+  assert.equal(sent[0].method, 'POST');
+  assert.ok(calls.some((c) => /rulesets\?includes_parents=false/.test(c)));
 });
 
 test('the check callers must be on the default branch first, and nothing is sent without them', () => {
