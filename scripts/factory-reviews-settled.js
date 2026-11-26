@@ -59,11 +59,18 @@ const MISSING_STATUS_GRACE_MINUTES = 10;
  * no run for a push, and then the PR cannot be merged and nothing else retries. A
  * dispatch reads the PR from the API and posts nothing if the head moved. A failed
  * dispatch only warns: the next run (every 15 minutes) tries again.
+ *
+ * `asked` holds what this run already dispatched. A `--wait` run passes here every minute,
+ * and the callers cancel an in-progress run of the same PR when dispatched again, so a
+ * second dispatch could cancel the run the first one started.
  */
-function recoverStatuses(gh, config, pr, report, rows, now, log) {
+function recoverStatuses(gh, config, pr, report, rows, now, log, asked = new Set()) {
   if (now - Date.parse(report.lastPushAt) < MISSING_STATUS_GRACE_MINUTES * 60000) return;
   for (const { context, workflow } of REQUIRED_STATUSES) {
     if (rows.some((row) => row.context === context)) continue;
+    const key = `${pr}:${report.head}:${context}`;
+    if (asked.has(key)) continue;
+    asked.add(key);
     try {
       gh(['workflow', 'run', workflow, '--ref', config.default_branch, '-f', `pr=${pr}`]);
       log(`#${pr}: no ${context} status on the head; dispatched ${workflow}`);
@@ -114,7 +121,7 @@ const sleepSync = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),
  * One pass over the open factory PRs (or the one given): posts each status that changed.
  * @returns {{number: number, state: string, head: string}[]} Where each PR stands.
  */
-function settleOnce(arg, { config, gh, feedback, log, now }) {
+function settleOnce(arg, { config, gh, feedback, log, now, asked }) {
   const { changeFromLabels } = createRouter(config);
   const found = [];
   for (const pr of factoryPrs(gh, changeFromLabels, arg)) {
@@ -128,7 +135,7 @@ function settleOnce(arg, { config, gh, feedback, log, now }) {
     if (!status) continue;
     found.push({ number: pr.number, state: status.state, head: report.head });
     const rows = statusesOf(gh, report.head);
-    recoverStatuses(gh, config, pr.number, report, rows, now, log);
+    recoverStatuses(gh, config, pr.number, report, rows, now, log, asked);
     const current = currentStatus(rows);
     if (current && current.state === status.state && current.description === status.description) {
       log(`#${pr.number}: ${status.state} (unchanged)`);
@@ -162,6 +169,7 @@ function main(argv = process.argv.slice(2), io = {}) {
     gh: io.gh || defaultGh,
     feedback: io.feedback || defaultFeedback,
     log: io.log || console.log,
+    asked: new Set(),
   };
   const started = io.now ?? clock();
   let [last] = settleOnce(arg, { ...deps, now: started });
