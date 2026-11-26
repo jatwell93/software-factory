@@ -110,14 +110,14 @@ Details: [review bots](owner-setup.md#review-bots).
 
 ## Something is stuck
 
-| Symptom                                      | Do                                                                                                               |
-| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| A PR has `needs-human` and a "stuck" comment | It conflicts with the default branch, or sat idle a day with a failing or unfinished check. The factory skips it | Open it, **Update branch** (or fix the check), then remove the label by hand |
-| Nothing has happened for hours               | Wait; the hourly check is late. Then `factory status <pr>`                                                       |
-| A required check says "Waiting for status"   | Wait ten minutes, or close and reopen the pull request                                                           |
-| A run is `success` but there is no PR        | Read the `denied:` lines in the run log; add the command to `gates`                                              |
-| "Branch is out of date"                      | **Update branch** on the pull request, then merge                                                                |
-| `doctor` says `FAIL`                         | Run the command it prints                                                                                        |
+| Symptom                                                      | Do                                                                                                                                             |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| A PR has `needs-human` and a "stuck" comment                 | It conflicts with the default branch, or sat idle a day with a failing or unfinished check. The factory skips it                               | Open it, **Update branch** (or fix the check), then remove the label by hand |
+| Nothing has happened for hours                               | Wait; the hourly check is late. Then `factory status <pr>`                                                                                     |
+| A required check says "Waiting for status"                   | Wait ten minutes, or close and reopen the pull request                                                                                         |
+| A run failed and the tracking issue lists "refused" commands | The agent was refused a tool call and made nothing. Add the command to `gates` (its own pull request). The factory retries once, then asks you |
+| "Branch is out of date"                                      | **Update branch** on the pull request, then merge                                                                                              |
+| `doctor` says `FAIL`                                         | Run the command it prints                                                                                                                      |
 
 The full table is in the [factory guide](factory-guide.md#when-it-stops).
 

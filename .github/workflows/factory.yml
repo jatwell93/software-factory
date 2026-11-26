@@ -384,6 +384,19 @@ jobs:
           node "$FACTORY_DIR/scripts/pr-feedback.js" checks "$PR" > "$RUNNER_TEMP/factory-checks.json"
           echo "FACTORY_CHECKS_FILE=$RUNNER_TEMP/factory-checks.json" >> "$GITHUB_ENV"
 
+      # The PR's head before the agent runs, so a run that was refused tool calls and
+      # pushed nothing can be told from one that did its job (factory-denied.js).
+      - name: Note the PR's head before the run
+        id: head_before
+        if: (needs.route.outputs.mode == 'task' || needs.route.outputs.mode == 'archive') && needs.route.outputs.pr != ''
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ needs.route.outputs.pr }}
+        run: |
+          echo "sha=$(gh pr view "$PR" --json headRefOid --jq .headRefOid)" >> "$GITHUB_OUTPUT"
+
       - name: Run Claude
         id: claude
         uses: anthropics/claude-code-action@v1
@@ -446,6 +459,25 @@ jobs:
           path: ${{ runner.temp }}/factory-run-record.json
           retention-days: 14
           if-no-files-found: ignore
+
+      # A task or archive run that was refused tool calls and made nothing ends `success`
+      # with no pull request, and the owner would have to read the log to learn why. Fail
+      # it: the report job queues the one retry, a second failure asks the owner, and the
+      # refused commands are commented on the tracking issue. After the record and the
+      # upload, so those always happen. A babysit pass is left out (no push is normal).
+      - name: Fail a run that was refused tool calls and made nothing
+        if: steps.claude.outcome == 'success' && (needs.route.outputs.mode == 'task' || needs.route.outputs.mode == 'archive') && env.FACTORY_DIR != ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
+          CHANGE_ID: ${{ needs.route.outputs.change_id }}
+          MODE: ${{ needs.route.outputs.mode }}
+          PR: ${{ needs.route.outputs.pr }}
+          HEAD_BEFORE: ${{ steps.head_before.outputs.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          node "$FACTORY_DIR/scripts/factory-denied.js" "$MODE" "$CHANGE_ID" ${PR:+"$PR"} --execution "$EXECUTION_FILE" --run-url "$RUN_URL" ${HEAD_BEFORE:+--head-before "$HEAD_BEFORE"}
 
   escalate:
     name: Ask the owner to do an owner task

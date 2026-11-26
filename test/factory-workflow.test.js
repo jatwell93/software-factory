@@ -298,3 +298,23 @@ test('the dispatch step still runs when the flagging step failed', () => {
   const dispatch = sweep.steps[indexOfStep(sweep, 'Dispatch a run')];
   assert.equal(dispatch.if, '${{ !cancelled() }}');
 });
+
+test('a task or archive run that was refused tool calls and made nothing ends red, after its record', () => {
+  const noted = indexOfStep(run, "Note the PR's head before the run");
+  const agent = indexOfStep(run, 'Run Claude');
+  const record = indexOfStep(run, "Record the run's cost");
+  const upload = indexOfStep(run, 'Upload the run record');
+  const fail = indexOfStep(run, 'Fail a run that was refused tool calls');
+  assert.ok(noted !== -1 && noted < agent, 'the head is noted before the agent runs');
+  assert.ok(fail > upload && upload > record, 'the check comes after the record and the upload');
+  const step = run.steps[fail];
+  assert.match(step.if, /steps\.claude\.outcome == 'success'/);
+  assert.match(step.if, /mode == 'task'/);
+  assert.match(step.if, /mode == 'archive'/);
+  assert.doesNotMatch(step.if, /babysit/);
+  assert.match(step.run, /factory-denied\.js/);
+  assert.equal(step.env.HEAD_BEFORE, '${{ steps.head_before.outputs.sha }}');
+  assert.match(step.env.RUN_URL, /actions\/runs\/\$\{\{ github\.run_id \}\}/);
+  assert.equal(run.steps[noted].id, 'head_before');
+  assert.match(run.steps[noted].if, /pr != ''/);
+});

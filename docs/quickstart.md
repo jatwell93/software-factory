@@ -88,7 +88,7 @@ If nothing happens for a while, see [When it stops](factory-guide.md#when-it-sto
 
 ## If it fails
 
-- **A run ends `success` but there is no pull request.** Read the run log for lines that start `denied:`: the agent was refused a tool call. Usually a gate command is missing from `gates`.
+- **A run fails and the tracking issue lists refused commands.** The agent was refused a tool call and made nothing. Usually a gate command is missing from `gates`. The factory retries once, then asks you. A run that is refused a call but still opens its pull request stays `success`: its log has the `denied:` lines.
 - **A required check stays "Waiting for status".** Close and reopen the pull request. The factory also re-posts the two statuses after ten minutes.
 - **`needs-human` appears on the tracking issue.** The factory asked you a question or reached an owner task. Do it, then remove the label.
 - **The first push of a private repository stays "Waiting for approval".** Click **Approve and run workflows** on the pull request's Checks tab.
