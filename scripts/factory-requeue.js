@@ -28,7 +28,8 @@ const { loadConfig } = require('../lib/config.js');
 const { createRouter } = require('../lib/router.js');
 const { FACTORY_WORKFLOW } = require('../lib/workflow.js');
 
-const defaultGh = (args) => execFileSync('gh', args, { encoding: 'utf8' });
+const defaultGh = (args) =>
+  execFileSync('gh', args, { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
 
 /** Every item of a paginated `gh api` listing. */
 const pages = (gh, endpoint) => JSON.parse(gh(['api', '--paginate', '--slurp', endpoint])).flat();
