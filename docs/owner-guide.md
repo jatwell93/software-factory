@@ -25,7 +25,7 @@ Run `factory` from your project's root, logged in to `gh`.
 | 6    | `factory post-merge`                                    | Nothing. It tidies your checkout                |
 | 7    | Answer anything under `needs-human`                     | Waits for you                                   |
 
-First time through? The [quickstart](quickstart.md#4-plan-a-first-change) walks steps 1 to 3 with a real change.
+First time through? The [quickstart](quickstart.md#5-plan-a-first-change) walks the steps with a real change.
 
 ## Can I merge?
 
@@ -77,10 +77,12 @@ Each day the factory posts one comment on its digest issue: what waits on you, t
 Five minutes, from each project's root:
 
 ```
-factory doctor          # config, workflows, labels, secret, ruleset, review bots, pin
+factory doctor          # config, workflows, labels, secret, ruleset, review bots, pin, CI audit
 ```
 
 Every gap prints the command that fixes it. `FAIL` needs action; `warn` can wait a little; `skip` is normal when GitHub could not be asked.
+
+**CI audit.** `doctor` also reports which kinds of independent CI check your project lacks (tests, lint or type check, security scan, secrets scan, dependency updates). It only warns. What to add is in [the CI audit](owner-setup.md#the-ci-audit).
 
 **Pin drift.** `doctor` warns when your pinned factory version is 5 or more commits behind. To move one project:
 

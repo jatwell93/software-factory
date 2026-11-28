@@ -12,6 +12,17 @@ Plan a change with an agent, then let it build the change task by task as pull r
 | Do the steps only the repository owner can do   | [Owner setup](docs/owner-setup.md)     |
 | Look up what a script, workflow or skill does   | [Reference](docs/reference.md)         |
 
+## Spec frameworks
+
+You plan changes in a spec framework, and `init` wires the project to one (`--spec-source`).
+
+| Framework                                          | Status                               |
+| -------------------------------------------------- | ------------------------------------ |
+| [OpenSpec](https://github.com/Fission-AI/OpenSpec) | Wired, the default                   |
+| [PAUL](https://github.com/ChristopherKahler/paul)  | Wired, not yet run on a real project |
+| [GSD](https://github.com/open-gsd/gsd-core)        | Being considered for a future change |
+| [fspec](https://github.com/sengac/fspec)           | Being considered for a future change |
+
 ## The idea in four lines
 
 1. You write a change and slice it into tasks (`/to-tickets`). Merging the plan pull request is the go.

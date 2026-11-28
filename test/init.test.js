@@ -437,3 +437,33 @@ test('--adopt-hooks keeps the project hooks when the installer throws', () => {
   assert.throws(() => runInit({ root, ref: REF, adoptHooks: true }, fakeIo(failing)), /boom/);
   assert.equal(fs.readFileSync(own, 'utf8'), '#!/bin/sh\necho mine\n');
 });
+
+test('a new config without --spec-source says which framework it chose and what else exists', () => {
+  const { root, git } = project();
+  const result = runInit({ root, ref: REF }, fakeIo(git));
+  assert.equal(result.notes.length, 1);
+  assert.match(result.notes[0], /spec framework: openspec/);
+  assert.match(result.notes[0], /paul/);
+  assert.match(result.notes[0], /GSD.*fspec.*not wired/);
+});
+
+test('choosing --spec-source, or keeping an existing config, prints no framework note', () => {
+  const chosen = project();
+  assert.deepEqual(
+    runInit({ root: chosen.root, ref: REF, specSource: 'paul' }, fakeIo(chosen.git)).notes,
+    [],
+  );
+  const again = project();
+  runInit({ root: again.root, ref: REF }, fakeIo(again.git));
+  assert.deepEqual(runInit({ root: again.root, ref: REF }, fakeIo(again.git)).notes, []);
+});
+
+test('an unknown --spec-source is a usage error naming the wired ones, and writes nothing', () => {
+  const { root, git } = project();
+  const before = snapshot(root);
+  assert.throws(
+    () => runInit({ root, ref: REF, specSource: 'gsd' }, fakeIo(git)),
+    (error) => error.userError && /have: openspec, paul/.test(error.message),
+  );
+  assert.deepEqual(snapshot(root), before);
+});

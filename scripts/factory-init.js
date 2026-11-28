@@ -8,7 +8,7 @@
  * Usage:
  *   node factory-init.js [--ref <sha|v*>] [--owner <login>] [--default-branch <name>]
  *     [--gate <cmd>]... [--ci-workflow <name>]... [--review-bot <login>]...
- *     [--spec-source <name>]
+ *     [--spec-source <openspec|paul>]
  *     [--apply-ruleset --ci-check <check name>...]
  *     [--force] [--adopt-hooks] [--dry-run] [--no-labels] [--no-adapter-setup]
  *     [--no-permissions]
@@ -83,6 +83,7 @@ function main(argv = process.argv.slice(2), root = process.cwd(), log = console.
   for (const file of result.files) {
     log(`${file.status.padEnd(9)} ${file.path}${file.note ? `  (${file.note})` : ''}`);
   }
+  for (const note of result.notes) log(`note: ${note}`);
   for (const warning of result.warnings) log(`warning: ${warning}`);
   log('\nOwner steps:');
   result.steps.forEach((step, i) => log(`${i + 1}. ${step}`));

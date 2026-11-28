@@ -20,7 +20,20 @@ export FACTORY_DIR="$PWD"
 
 Pin to a release tag (`v*`) or a full 40-character commit SHA, never a branch. `init` uses the commit your checkout is on, so check out the tag you want first and make sure it is pushed.
 
-## 2. Run `init`
+## 2. Pick your spec framework
+
+The factory builds from a spec source: the tool you plan a change in. Choose one before you run `init`, because `init` writes it into `factory.config.yml` and sets up the project for it.
+
+| Framework                                          | `--spec-source` | Status                                            |
+| -------------------------------------------------- | --------------- | ------------------------------------------------- |
+| [OpenSpec](https://github.com/Fission-AI/OpenSpec) | `openspec`      | Wired, and the default. Five skills.              |
+| [PAUL](https://github.com/ChristopherKahler/paul)  | `paul`          | Wired, not yet run on a real project. Two skills. |
+| [GSD](https://github.com/open-gsd/gsd-core)        | none yet        | Being considered.                                 |
+| [fspec](https://github.com/sengac/fspec)           | none yet        | Being considered.                                 |
+
+`init` refuses any other `--spec-source` and lists the wired ones. Without the flag it uses OpenSpec and says so. Changing later means deleting `factory.config.yml` and running `init` again, so choose first. How each adapter maps changes and tasks is in the [reference](reference.md).
+
+## 3. Run `init`
 
 From the root of your project, on a branch (not `main`):
 
@@ -28,15 +41,15 @@ From the root of your project, on a branch (not `main`):
 node "$FACTORY_DIR/scripts/factory-init.js"
 ```
 
-It detects your stack, your owner and default branch, and your CI workflow names, then writes `factory.config.yml`, six caller workflows pinned to the factory commit, five agent skills, a block in `AGENTS.md` and the git hooks; runs the spec source's own setup (OpenSpec); and creates the labels. It lists every file it wrote, including the ones the OpenSpec setup created.
+It detects your stack, your owner and default branch, and your CI workflow names, then writes `factory.config.yml`, six caller workflows pinned to the factory commit, the agent skills for your spec framework (five for OpenSpec, two for PAUL), a block in `AGENTS.md` and the git hooks; runs the spec source's own setup; and creates the labels. It lists every file it wrote, including the ones the spec source's setup created. It also checks your CI (see [the CI audit](owner-setup.md#the-ci-audit)) and prints a `warning: ci audit` line for each kind of independent check it cannot find.
 
 If it cannot find a gate it stops and asks for one: pass `--gate "<test command>"` or `--ci-workflow "<workflow name>"`. `--dry-run` shows the plan and writes nothing. A second run changes nothing.
 
-A project with no root `package.json` (frontend and backend in subfolders, say) gets no detected gate: pass each with `--gate`, and set `runner.install` and the runtime versions in the config. `--ci-workflow` must name a workflow that really runs on pull requests: check its name under the repository's Actions tab. A workflow file GitHub cannot parse never shows up there, so the factory would wait for a CI run that never comes. `--spec-source paul` selects the [PAUL adapter](reference.md); without it you get OpenSpec.
+A project with no root `package.json` (frontend and backend in subfolders, say) gets no detected gate: pass each with `--gate`, and set `runner.install` and the runtime versions in the config. `--ci-workflow` must name a workflow that really runs on pull requests: check its name under the repository's Actions tab. A workflow file GitHub cannot parse never shows up there, so the factory would wait for a CI run that never comes. `--spec-source paul` selects the [PAUL adapter](reference.md); see [pick your spec framework](#2-pick-your-spec-framework).
 
 Open `factory.config.yml` and read it before you commit. The gates are what the agent must pass before it pushes.
 
-## 3. Do the owner steps
+## 4. Do the owner steps
 
 `init` prints them; [owner-setup.md](owner-setup.md) has the detail. In order:
 
@@ -51,11 +64,11 @@ Then run `doctor` from the project's root:
 node "$FACTORY_DIR/scripts/factory-doctor.js"
 ```
 
-Each line reads `ok`, `warn`, `FAIL` or `skip`, and each gap prints the command that fixes it. `skip` for the Claude GitHub App is normal: a script cannot see installations. Carry on when nothing says `FAIL`.
+Each line reads `ok`, `warn`, `FAIL` or `skip`, and each gap prints the command that fixes it. A `ci audit` line names the kinds of independent CI check your project lacks (tests, lint or type check, security scan, secrets scan, dependency updates). It only warns, but those checks are what decide what may merge, so it is worth acting on before the first task: see [the CI audit](owner-setup.md#the-ci-audit). `skip` for the Claude GitHub App is normal: a script cannot see installations. Carry on when nothing says `FAIL`.
 
 If you use a review bot (Copilot, CodeScene, Cursor Bugbot, CodeRabbit, Sentry), list its login under `review_bots` now (or pass `--review-bot <login>` to `init`). Any bot or person can comment either way; the list only sets what the pull request waits for. See [review bots](owner-setup.md#review-bots).
 
-## 4. Plan a first change
+## 5. Plan a first change
 
 Pick something small: one or two tasks, no new dependency, nothing in a protected path.
 
@@ -80,7 +93,7 @@ gh pr create --label factory:security-alerts --label factory-ready
 
 Merging a plan pull request without both labels starts nothing (the Factory run logs `not a factory PR`). If that happens, start the change by hand with `gh workflow run Factory -f change_id=security-alerts`. `init` writes the same rule into your `AGENTS.md`, so the agent that opens the plan pull request has it.
 
-## 5. Watch it build
+## 6. Watch it build
 
 The factory opens a pull request for the first task, waits for CI and the review bots, fixes what they raise, then marks the pull request ready. You merge each one (or the single per-change pull request, once `WIP:` is gone from its title). When no task is left, the factory archives the change and asks you to merge the last pull request.
 
